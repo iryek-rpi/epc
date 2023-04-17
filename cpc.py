@@ -41,13 +41,16 @@ def receive_serial(_app):
         print('시리얼 예외 발생: ', e)
     else:
         while not current_thread().stopped():
-            data = device.read()
+            data = device.read(1024)
             if data:
                 _app.receive_textbox.insert("0.0", data.decode())
                 print(data)
             elif _app.data_to_send:
                 _written = device.write(_app.data_to_send.encode())
                 _app.data_to_send = None
+                time.sleep(0.2)
+                device.reset_input_buffer()
+
                 print(f"written: {_written}")
                 msg = f"{_written}바이트 전송 완료"
                 _app.label_data2send.configure(text=msg)
@@ -75,7 +78,7 @@ class App(ctk.CTk):
         self.data_to_send = None
 
         # configure window
-        self.title("데이터암호화 모듈 클라이언트")
+        self.title("(주)위너스시스템 데이터암호화 모듈 클라이언트")
         self.geometry(f"{1100}x{580}")
 
         self.grid_columnconfigure((2, 3), weight=1)
