@@ -14,8 +14,6 @@ ctk.set_appearance_mode(
 ctk.set_default_color_theme(
     "blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
-APP = None
-
 class StoppableThread(threading.Thread):
     """Thread class with a stop() method. The thread itself has to check
     regularly for the stopped() condition."""
@@ -30,16 +28,32 @@ class StoppableThread(threading.Thread):
     def stopped(self):
         return self._stop_event.is_set()
 
-def receive_serial(app):
-    device = serial.Serial(app.comm['port'], 9600, timeout=1)
-    while not current_thread().stopped():
-        data = device.read()
-        if data:
-            app.receive_textbox.insert("0.0", data.decode())
-            print(data)
+def receive_serial(_app):
+    try:
+        _app.comm['port'] = _app.entry_serial_port.get()
+        device = serial.Serial(port=_app.comm['port'], 
+                               baudrate=_app.comm['baudrate'], 
+                               bytesize=_app.comm['bytesize'],
+                               parity=_app.comm['parity'],
+                               stopbits=_app.comm['stopbits'],
+                               timeout=0.005) #5ms
+    except serial.serialutil.SerialException as e:
+        print('시리얼 예외 발생: ', e)
+    else:
+        while not current_thread().stopped():
+            data = device.read()
+            if data:
+                _app.receive_textbox.insert("0.0", data.decode())
+                print(data)
+            elif _app.data_to_send:
+                _written = device.write(_app.data_to_send.encode())
+                _app.data_to_send = None
+                print(f"written: {_written}")
+                msg = f"{_written}바이트 전송 완료"
+                _app.label_data2send.configure(text=msg)
 
-    device.close()
-    device = None
+        device.close()
+        device = None
 
 class App(ctk.CTk):
 
@@ -55,17 +69,13 @@ class App(ctk.CTk):
             "stopbits": 1
         }
 
-        self.serial_port = "COM2"
-        self.serial_speed = 9600
-        self.serial_parity = "N"
-        self.serial_databits = 8
-        self.serial_stopbits = 1
         self.cipher = "XOR"
 
         self.receive_thread = None
+        self.data_to_send = None
 
         # configure window
-        self.title("(주)위너스시스템 데이터암호화 모듈 클라이언트")
+        self.title("데이터암호화 모듈 클라이언트")
         self.geometry(f"{1100}x{580}")
 
         self.grid_columnconfigure((2, 3), weight=1)
@@ -159,11 +169,12 @@ class App(ctk.CTk):
                                       pady=1,
                                       sticky="nw")  #,
 
+
         self.label_cipher = ctk.CTkLabel(self.sidebar_frame,
                                          text="암호화 방식:")  #,
         #anchor="w")
         self.label_cipher.grid(
-            row=20,
+            row=19,
             column=0,
             padx=10,
             #pady=(2, 0),
@@ -175,11 +186,21 @@ class App(ctk.CTk):
             self.sidebar_frame,
             values=["XOR", "AES"],
             command=self.change_cipher_event)
-        self.cipher_optionemenu.grid(row=21,
+        self.cipher_optionemenu.grid(row=20,
                                      column=0,
                                      padx=10,
                                      pady=(0, 10),
                                      sticky="nw")
+
+        self.apply_options_button = ctk.CTkButton(self.sidebar_frame,
+                                        fg_color='#CC6600', hover_color='#AA4400',
+                                         command=self.apply_options_event)
+        self.apply_options_button.configure(text="옵션 적용")
+        self.apply_options_button.grid(row=22,
+                              column=0,
+                              padx=10,
+                              pady=(30, 1),
+                              sticky="nw")
 
         #=================================================================================
         #
@@ -241,10 +262,10 @@ class App(ctk.CTk):
 
         # create textbox
         self.receive_button = ctk.CTkButton(self.receive_frame,
-                                            command=self.receive_button_event)
+                                            command=self.receive_button_dummy_event)
         #self.receive_button = ctk.CTkLabel(self.receive_frame, text="수신 데이터")
 
-        self.receive_button.configure(text="데이터 수신",
+        self.receive_button.configure(text="수신 데이터",
                                       bg_color='#889933',
                                       fg_color='#889933')
         self.receive_button.grid(row=0,
@@ -261,12 +282,13 @@ class App(ctk.CTk):
                                  pady=(1, 5),
                                  sticky="nw")
 
-        self.receive_textbox = ctk.CTkTextbox(self.receive_frame, width=420)
+        self.receive_textbox = ctk.CTkTextbox(self.receive_frame, width=420)#, border_color='blue', bg_color='blue')
         self.receive_textbox.grid(row=2,
                           column=0,
                           padx=(20, 20),
                           pady=(1, 55),
                           sticky="nsew")
+        #self.receive_textbox.configure(bg_color='blue', fg_color='blue', border_color='blue')
 
     def load_file_event(self):
         self.filename = fdlg.askopenfilename()
@@ -278,30 +300,13 @@ class App(ctk.CTk):
         self.textbox.insert("0.0", file_contents)
 
     def send_button_event(self):
-        if self.comm['device']:
-            self.comm['device'].close()
+        if not self.receive_thread:
+            self.init_comm_thread()
 
-        self.comm['device'] = serial.Serial(self.entry_serial_port.get(), 9600)
-        device = self.comm['device']
-        data = self.textbox.get("1.0", "end-1c")
-        
-        start = 0
-        step = 16
-        while(start < len(data)):
-            if len(data)<step:
-                device.write(data.encode())
-                #device.write(data)
-                break
-            else:
-                device.write(data[start:start+step].encode())
-                start += step
-            time.sleep(0.2)
-    
-        msg = f"{len(data)}바이트 전송 완료"
-        #self.pop_up_msg(msg)
-        self.label_data2send.configure(text=msg)
+        self.data_to_send = self.textbox.get("1.0", "end-1c")
 
-
+    def apply_options_event(self):
+        self.init_comm_thread()
 
     def pop_up_msg(self, msg:str):
         win = ctk.CTkToplevel()
@@ -317,7 +322,7 @@ class App(ctk.CTk):
         btn = ctk.CTkButton(master=frame, text="OK", command=win.destroy)
         btn.pack(ipady=5,ipadx=5,pady=10,padx=10)
 
-    def receive_button_event(self):
+    def init_comm_thread(self):
         if self.receive_thread:
             self.receive_thread.stop()
             self.receive_thread.join()
@@ -326,24 +331,27 @@ class App(ctk.CTk):
         self.receive_thread = StoppableThread(target=receive_serial,args=(self,))
         self.receive_thread.start()
 
+    def receive_button_dummy_event(self):
+        pass
+
     def clear_button_event(self):
         self.textbox.delete("1.0", "end-1c")
         self.label_data2send.configure(text="")
 
     def change_speed_event(self, new_speed: str):
-        pass
+        self.comm['baudrate'] = new_speed
 
     def change_parity_event(self, new_parity: str):
-        pass
+        self.comm['parity'] = new_parity
 
     def change_databits_event(self, new_databits: str):
-        pass
+        self.comm['bytesize'] = new_databits
 
     def change_stopbits_event(self, new_stopbits: str):
-        pass
+        self.comm['stopbits'] = new_stopbits
 
     def change_cipher_event(self, new_cipher: str):
-        pass
+        self.cipher = new_cipher
 
     def change_scaling_event(self, new_scaling: str):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
@@ -355,63 +363,7 @@ class App(ctk.CTk):
 if __name__ == "__main__":
 
     app = App()
-    APP = app
-
+    app.entry_serial_port.insert(0, "COM3")
+    app.init_comm_thread()
 
     app.mainloop()
-'''
-        #=================================================================================
-        # create slider and progressbar frame
-        self.slider_progressbar_frame = ctk.CTkFrame(self)  #,
-        #fg_color='transparent')  #, fg_color='yellow')  #"transparent")
-        self.slider_progressbar_frame.grid(
-            row=0,
-            column=2,
-            #columnspan=2,
-            rowspan=3,
-            padx=(5, 0),
-            pady=(20, 10),
-            sticky="nsew")
-        #self.slider_progressbar_frame.grid_rowconfigure(2, weight=1)
-        self.slider_progressbar_frame.grid_columnconfigure(0, weight=1)
-        self.slider_progressbar_frame.grid_rowconfigure(4, weight=1)
-
-        self.send_button = ctk.CTkButton(master=self.slider_progressbar_frame,
-                                         command=self.send_file_event)
-        self.send_button.configure(text="파일 송신")
-        self.send_button.grid(row=0,
-                              column=0,
-                              padx=10,
-                              pady=(20, 5),
-                              sticky="nswe")
-
-        self.progressbar_1 = ctk.CTkProgressBar(self.slider_progressbar_frame)
-        self.progressbar_1.grid(row=1,
-                                column=0,
-                                padx=(20, 10),
-                                pady=(10, 10),
-                                sticky="ew")
-        self.progressbar_2 = ctk.CTkProgressBar(self.slider_progressbar_frame)
-        self.progressbar_2.grid(row=2,
-                                column=0,
-                                padx=(20, 10),
-                                pady=(10, 10),
-                                sticky="ew")
-        self.slider_1 = ctk.CTkSlider(self.slider_progressbar_frame,
-                                      from_=0,
-                                      to=1,
-                                      number_of_steps=4)
-
-        # set default values
-        #self.sidebar_button_3.configure(state="disabled",
-        #                                text="Disabled CTkButton")
-
-        self.cipher_optionemenu.set("XOR")
-        self.slider_1.configure(command=self.progressbar_2.set)
-        self.progressbar_1.configure(mode="indeterminnate")
-        self.progressbar_1.start()
-        #self.textbox.insert(
-        #    "0.0", "CTkTextbox\n\n" +
-        #    "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\n\n"
-        #    * 20)
-'''
