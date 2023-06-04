@@ -58,42 +58,43 @@ def init_dec_connection(_app):
         dec_socket.close()
         dec_socket = None
         tkinter.messagebox.showerror("오류", f"복호화단말({dec_ip}:{dec_port})에 연결할 수 없습니다.")
-        return
+        return None
     else:
         _app.dec_socket = dec_socket
         _app.label_dec_status.configure(text="연결됨")
         _app.label_dec_status.configure(fg_color="green")
+        return _app.dec_socket
 
 def send_plaintext(_app):
     if not _app.enc_socket:
         if not init_enc_connection(_app):
             return
-    else:
-        plaintext = _app.send_textbox.get("1.0", "end-1c")
-        if not plaintext:
-            tkinter.messagebox.showerror("오류", "암호화할 평문을 입력하세요.")
-            return
 
-        else:
-            _app.enc_socket.send(plaintext.encode())
-            tnc = _app.enc_socket.recv(1024)
-            _app.ciphertext = tnc
-            _app.ciphertext_textbox.delete("1.0", "end-1c")
-            _app.ciphertext_textbox.insert(tkinter.END, tnc)
+    plaintext = _app.send_textbox.get("1.0", "end-1c")
+    if not plaintext:
+        tkinter.messagebox.showerror("오류", "암호화할 평문을 입력하세요.")
+        return
+
+    else:
+        _app.enc_socket.send(plaintext.encode())
+        tnc = _app.enc_socket.recv(1024)
+        _app.ciphertext = tnc
+        _app.ciphertext_textbox.delete("1.0", "end-1c")
+        _app.ciphertext_textbox.insert(tkinter.END, tnc)
 
 def decrypt_ciphertext(_app):
     if not _app.dec_socket:
         if not init_dec_connection(_app):
             return
+
+    ciphertext = _app.ciphertext_textbox.get("1.0", "end-1c")
+    if not ciphertext:
+        return
     else:
-        ciphertext = _app.ciphertext_textbox.get("1.0", "end-1c")
-        if not ciphertext:
-            return
-        else:
-            _app.dec_socket.send(_app.ciphertext)
-            tnc = _app.dec_socket.recv(1024)
-            _app.decrypt_textbox.delete("1.0", "end-1c")
-            _app.decrypt_textbox.insert(tkinter.END, tnc)
+        _app.dec_socket.send(_app.ciphertext)
+        tnc = _app.dec_socket.recv(1024)
+        _app.decrypt_textbox.delete("1.0", "end-1c")
+        _app.decrypt_textbox.insert(tkinter.END, tnc)
 
 class App(ctk.CTk):
 
@@ -110,7 +111,7 @@ class App(ctk.CTk):
 
         # configure window
         self.title("(주)위너스시스템 데이터암호화 모듈 테스트 클라이언트")
-        self.geometry(f"{1100}x{580}")
+        self.geometry(f"{1130}x{580}")
 
         self.grid_columnconfigure((2, 3), weight=1)
         self.grid_rowconfigure((0, 1, 2), weight=1)

@@ -104,7 +104,7 @@ def init_dec_server(_app):
         while True:
             _app.label_dec_status.configure(text="암호화서버 접속 대기 중")
             _app.label_dec_status.configure(fg_color="light green")
-            print("\n\nWaiting for decrypt clinet connection...")
+            print("\n\nWaiting for decrypt client connection...")
             conn, address = _app.dec_server_socket.accept()  # accept new connection
             print("Connected from: " + str(address))
 
@@ -189,15 +189,15 @@ class App(ctk.CTk):
         self.label_dec_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="복호화 서버 중지됨")
         self.label_dec_status.grid(row=17, column=0, padx=10, pady=(10,1), sticky="nw")
 
-        self.label_peer_ip = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 주소")
-        self.label_peer_ip.grid(row=18, column=0, padx=10, pady=(30,1), sticky="nw")
-        self.entry_peer_ip = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"0.0.0.0")
-        self.entry_peer_ip.grid(row=19, column=0, padx=10, pady=1, sticky="nw")
+        #self.label_peer_ip = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 주소")
+        #self.label_peer_ip.grid(row=18, column=0, padx=10, pady=(30,1), sticky="nw")
+        #self.entry_peer_ip = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"0.0.0.0")
+        #self.entry_peer_ip.grid(row=19, column=0, padx=10, pady=1, sticky="nw")
 
-        self.label_peer_port = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 포트")
-        self.label_peer_port.grid(row=20, column=0, padx=10, pady=(10,1), sticky="nw")
-        self.entry_peer_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"8501")
-        self.entry_peer_port.grid(row=21, column=0, padx=10, pady=1, sticky="nw")
+        #self.label_peer_port = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 포트")
+        #self.label_peer_port.grid(row=20, column=0, padx=10, pady=(10,1), sticky="nw")
+        #self.entry_peer_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"8501")
+        #self.entry_peer_port.grid(row=21, column=0, padx=10, pady=1, sticky="nw")
 
         self.label_key = ctk.CTkLabel(self.sidebar_frame, text="암호화 키(8-16자리)")
         self.label_key.grid(row=30, column=0, padx=10, pady=(30,1), sticky="nw")
@@ -343,9 +343,16 @@ class App(ctk.CTk):
 if __name__ == "__main__":
 
     app = App()
+
+    with open("network_config.txt", "r") as f:
+        lines = f.readlines()
+        server_ip = lines[0].split(":")[1].strip()
+        port_enc = lines[1].split(":")[1].strip()
+        port_dec = lines[2].split(":")[1].strip()
+
     app.entry_server_ip.insert(0, "127.0.0.1")
-    app.entry_enc_port.insert(0, PORT_ENC)
-    app.entry_dec_port.insert(0, PORT_DEC)
+    app.entry_enc_port.insert(0, port_enc)
+    app.entry_dec_port.insert(0, port_dec)
     app.entry_key.insert(0, "12345678")
     app.init_server_thread()
 
