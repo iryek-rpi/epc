@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onedir --windowed --add-data "c:\tools\miniconda3\envs\tkinter\lib\site-packages/customtkinter;customtkinter/" enc_client.py
