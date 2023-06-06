@@ -1,11 +1,8 @@
 import time
 import threading
-from threading import Thread
 from threading import current_thread
 
-import tkinter
 import tkinter.filedialog as fdlg
-import tkinter.messagebox
 import customtkinter as ctk
 import serial
 
