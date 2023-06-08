@@ -8,12 +8,14 @@ import tkinter
 import tkinter.filedialog as fdlg
 import tkinter.messagebox
 import customtkinter as ctk
+from CTkMessagebox import CTkMessagebox
 import socket
 
 from crypto_ex import *
 
 PORT_ENC = 8501
 PORT_DEC = 9501
+SUBNET_MASK = '255.255.255.0'
 COMM_PORT = '/dev/ttyUSB0'
 
 ctk.set_appearance_mode(
@@ -47,6 +49,9 @@ def receive_serial(_app):
             if data:
                 _app.plaintext_textbox.insert("0.0", data.decode())
                 print('수신: ', data)
+                device.reset_input_buffer()
+                device.write('READY_0\n'.encode())
+                break
                 #print(data)
             elif not data:
                 print('수신: No Data')
@@ -78,8 +83,8 @@ def init_enc_server(_app):
         return None
     else:
         while True:
-            _app.label_enc_status.configure(text="암호화서버 접속 대기 중")
-            _app.label_enc_status.configure(fg_color="light green")
+            #_app.label_enc_status.configure(text="암호화서버 접속 대기 중")
+            #_app.label_enc_status.configure(fg_color="light green")
             print("\n\nWaiting for encrytion client connection...")
             conn, address = _app.enc_server_socket.accept()  # accept new connection
             print("Connected from: " + str(address))
@@ -90,8 +95,8 @@ def init_enc_server(_app):
                 print("conn.recv(1024)...")
                 data = conn.recv(1024)
                 if not data:
-                    _app.label_enc_status.configure(text="암호화서버 중지됨")
-                    _app.label_enc_status.configure(fg_color="grey")
+                    #_app.label_enc_status.configure(text="암호화서버 중지됨")
+                    #_app.label_enc_status.configure(fg_color="grey")
                     # break if data is not received or client closed connection
                     break
                 print("Data received from client: ")
@@ -132,8 +137,8 @@ def init_dec_server(_app):
         return None
     else:
         while True:
-            _app.label_dec_status.configure(text="암호화서버 접속 대기 중")
-            _app.label_dec_status.configure(fg_color="light green")
+            #_app.label_dec_status.configure(text="암호화서버 접속 대기 중")
+            #_app.label_dec_status.configure(fg_color="light green")
             print("\n\nWaiting for decrypt client connection...")
             conn, address = _app.dec_server_socket.accept()  # accept new connection
             print("Connected from: " + str(address))
@@ -142,8 +147,8 @@ def init_dec_server(_app):
                 print("conn.recv(1024)...")
                 tnc = conn.recv(1024)
                 if not tnc:
-                    _app.label_dec_status.configure(text="복호화서버 중지됨")
-                    _app.label_dec_status.configure(fg_color="grey")
+                    #_app.label_dec_status.configure(text="복호화서버 중지됨")
+                    #_app.label_dec_status.configure(fg_color="grey")
                     break
                 print("Data received from decrypt client: ")
                 print(tnc)
@@ -195,7 +200,7 @@ class App(ctk.CTk):
         self.receive_frame = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color='transparent')
         self.receive_frame.grid(row=0, column=2, rowspan=3, sticky="nsew")
 
-        #self.sidebar_frame.grid_rowconfigure(10, weight=1)
+        #self.sidebar_frame.grid_rowconfigure(2, weight=1)
         self.send_frame.grid_rowconfigure(2, weight=1)
         self.receive_frame.grid_rowconfigure(2, weight=1)
 
@@ -206,50 +211,37 @@ class App(ctk.CTk):
         self.option_button.grid(row=0, column=0, padx=10, pady=(40, 1), sticky="nw")
 
         self.label_serial = ctk.CTkLabel(self.sidebar_frame, text="시리얼 통신 포트")
-        self.label_serial.grid(row=1, column=0, padx=10, pady=(10, 1), sticky="nw")
-
-        self.label_com = ctk.CTkLabel(self.sidebar_frame, text="포트")
-        self.label_com.grid(row=2, column=0, padx=10, pady=1, sticky="nw")
+        self.label_serial.grid(row=1, column=0, padx=10, pady=(20, 1), sticky="nw")
 
         self.entry_serial_port = ctk.CTkEntry(self.sidebar_frame)#, placeholder_text="COM2")
         self.entry_serial_port.grid(row=2, column=0, padx=10, pady=1, sticky="nw")
         self.entry_serial_port.insert(0, COMM_PORT)
 
-        self.label_server_ip = ctk.CTkLabel(self.sidebar_frame, text="서비스 IP 주소")
-        self.label_server_ip.grid(row=9, column=0, padx=10, pady=(30,1), sticky="nw")
-        self.entry_server_ip = ctk.CTkEntry(self.sidebar_frame, placeholder_text="127.0.0.1")
-        self.entry_server_ip.grid(row=10, column=0, padx=10, pady=1, sticky="nw")
+        self.label_network = ctk.CTkLabel(self.sidebar_frame, text="단말 네트워크 설정")
+        self.label_network.grid(row=9, column=0, padx=10, pady=(30,1), sticky="nw")
 
-        #self.switch_var = ctk.StringVar(value="Encoder")
-        #self.op_mode = ctk.CTkSwitch(self.sidebar_frame, text="암호화/복호화 서버", command=self.switch_event,
-        #                           variable=self.switch_var, onvalue="Encoder", offvalue="Decoder")
-        #self.op_mode.grid(row=11, column=0, padx=20, pady=(10, 10), sticky="nw")
+        self.label_ip = ctk.CTkLabel(self.sidebar_frame, text="IP")
+        self.label_ip.grid(row=10, column=0, padx=15, pady=(1,0), sticky="nw")
+        self.switch_var = ctk.StringVar(value="NO-DHCP")
+        self.dhcp = ctk.CTkSwitch(self.sidebar_frame, text="DHCP", command=self.switch_event,
+                                   variable=self.switch_var, onvalue="DHCP", offvalue="NO-DHCP")
+        self.dhcp.grid(row=10, column=0, padx=80, pady=(1,0), sticky="nw")
 
-        self.label_enc = ctk.CTkLabel(self.sidebar_frame, text="암호화포트")
-        self.label_enc.grid(row=12, column=0, padx=10, pady=(20,1), sticky="nw")
-        self.entry_enc_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{PORT_ENC}")
-        self.entry_enc_port.grid(row=13, column=0, padx=10, pady=1, sticky="nw")
+        self.entry_server_ip = ctk.CTkEntry(self.sidebar_frame)
+        self.entry_server_ip.grid(row=11, column=0, padx=10, pady=0, sticky="nw")
 
-        self.label_enc_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="암호화 서버 중지됨")
-        self.label_enc_status.grid(row=14, column=0, padx=10, pady=(10,1), sticky="nw")
+        self.label_subnet = ctk.CTkLabel(self.sidebar_frame, text="subnet mask")
+        self.label_subnet.grid(row=12, column=0, padx=15, pady=(1,0), sticky="nw")
+        self.entry_subnet = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{SUBNET_MASK}")
+        self.entry_subnet.grid(row=13, column=0, padx=10, pady=0, sticky="nw")
 
-        self.label_dec = ctk.CTkLabel(self.sidebar_frame, text="복호화포트")
-        self.label_dec.grid(row=15, column=0, padx=10, pady=(20,1), sticky="nw")
-        self.entry_dec_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{PORT_DEC}")
-        self.entry_dec_port.grid(row=16, column=0, padx=10, pady=1, sticky="nw")
+        self.label_port = ctk.CTkLabel(self.sidebar_frame, text="복호화포트")
+        self.label_port.grid(row=15, column=0, padx=10, pady=(20,1), sticky="nw")
+        self.entry_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{PORT_DEC}")
+        self.entry_port.grid(row=16, column=0, padx=10, pady=1, sticky="nw")
 
-        self.label_dec_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="복호화 서버 중지됨")
-        self.label_dec_status.grid(row=17, column=0, padx=10, pady=(10,1), sticky="nw")
-
-        #self.label_peer_ip = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 주소")
-        #self.label_peer_ip.grid(row=18, column=0, padx=10, pady=(30,1), sticky="nw")
-        #self.entry_peer_ip = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"0.0.0.0")
-        #self.entry_peer_ip.grid(row=19, column=0, padx=10, pady=1, sticky="nw")
-
-        #self.label_peer_port = ctk.CTkLabel(self.sidebar_frame, text="복호화단말 포트")
-        #self.label_peer_port.grid(row=20, column=0, padx=10, pady=(10,1), sticky="nw")
-        #self.entry_peer_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"8501")
-        #self.entry_peer_port.grid(row=21, column=0, padx=10, pady=1, sticky="nw")
+        #self.label_dec_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="복호화 서버 중지됨")
+        #self.label_dec_status.grid(row=17, column=0, padx=10, pady=(10,1), sticky="nw")
 
         self.label_key = ctk.CTkLabel(self.sidebar_frame, text="암호화 키(8-16자리)")
         self.label_key.grid(row=30, column=0, padx=10, pady=(30,1), sticky="nw")
@@ -325,7 +317,7 @@ class App(ctk.CTk):
         self.init_server_thread()
 
     def read_option_event(self):
-        self.init_comm_thread()
+        self.read_options_thread()
 
     def pop_up_msg(self, msg:str):
         win = ctk.CTkToplevel()
@@ -358,14 +350,14 @@ class App(ctk.CTk):
         self.receive_ciphertext_thread = StoppableThread(target=init_dec_server,args=(self,))
         self.receive_ciphertext_thread.start()
 
-    def init_comm_thread(self):
-        if self.comm_thread:
-            self.comm_thread.stop()
-            self.comm_thread.join()
-            self.comm_thread = None
+    def read_options_thread(self):
+        if self.read_options_thread:
+            self.read_options_thread.stop()
+            self.read_options_thread.join()
+            self.read_options_thread = None
 
-        self.comm_thread = StoppableThread(target=receive_serial,args=(self,))
-        self.comm_thread.start()
+        self.read_options_thread = StoppableThread(target=receive_serial,args=(self,))
+        self.read_options_thread.start()
 
     def receive_button_dummy_event(self):
         pass
@@ -399,19 +391,32 @@ class App(ctk.CTk):
 if __name__ == "__main__":
 
     app = App()
+    #app.config(cursor='watch')
 
-    with open("network_config.txt", "r") as f:
+    #CTkMessagebox(title="Info", message="This is a CTkMessagebox!")
+    tkinter.messagebox.showinfo("Info", "This is a tkinter.messagebox!")
+
+    with open("k2_config.txt", "r") as f:
         lines = f.readlines()
-        server_ip = lines[0].split(":")[1].strip()
-        port_enc = lines[1].split(":")[1].strip()
-        port_dec = lines[2].split(":")[1].strip()
+        comm_port = lines[0].split("comm:")[1].strip()
+        dhcp = lines[1].split("dhcp:")[1].strip()
+        ip = lines[2].split("ip:")[1].strip()
+        subnet = lines[3].split("subnet:")[1].strip()
+        port = lines[4].split("port:")[1].strip()
+        key = lines[5].split("key:")[1].strip()
 
-    app.entry_server_ip.insert(0, "127.0.0.1")
-    app.entry_enc_port.insert(0, port_enc)
-    app.entry_dec_port.insert(0, port_dec)
-    app.entry_key.insert(0, "12345678")
+    app.entry_serial_port.insert(0, comm_port)
+    #app.switch_var = ctk.StringVar(value="NO-DHCP")
+    if dhcp == "true":
+        app.switch_var.set("DHCP")
+    else:
+        app.switch_var.set("NO-DHCP")
+    app.entry_server_ip.insert(0, ip)
+    app.entry_subnet.insert(0, subnet)
+    app.entry_port.insert(0, port)
+    app.entry_key.insert(0, key)
+
     #app.init_server_thread()
-
     #app.init_comm_thread()
 
     app.mainloop()
