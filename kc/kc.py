@@ -69,7 +69,7 @@ class App(ctk.CTk):
             "stopbits": 1
         }
 
-        self.cipher = "XOR"
+        self.cipher = "AES"
 
         self.receive_thread = None
         self.data_to_send = None
