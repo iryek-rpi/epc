@@ -102,7 +102,7 @@ def init_dec_server(_app):
         return None
     else:
         while True:
-            _app.label_dec_status.configure(text="암호화서버 접속 대기 중")
+            _app.label_dec_status.configure(text="복호화서버 접속 대기 중")
             _app.label_dec_status.configure(fg_color="light green")
             print("\n\nWaiting for decrypt client connection...")
             conn, address = _app.dec_server_socket.accept()  # accept new connection
