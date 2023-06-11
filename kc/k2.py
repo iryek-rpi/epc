@@ -1,8 +1,11 @@
+import sys
 import time
 import threading
 from threading import Thread
 from threading import current_thread
+import logging
 
+import json
 import serial
 import tkinter
 import tkinter.filedialog as fdlg
@@ -13,15 +16,31 @@ import socket
 
 from crypto_ex import *
 
+# config a logger using default logger
+logging.basicConfig(filename='app.log', filemode='w', level=logging.DEBUG)
+logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+
+
 PORT_ENC = 8501
 PORT_DEC = 9501
 SUBNET_MASK = '255.255.255.0'
 COMM_PORT = '/dev/ttyUSB0'
+GATEWAY = '192.168.0.1'
 
 ctk.set_appearance_mode(
     "Light")  #"System")  # Modes: "System" (standard), "Dark", "Light"
 ctk.set_default_color_theme(
     "green")  # Themes: "blue" (standard), "green", "dark-blue"
+
+OPTIONS = {
+    'comm_port': COMM_PORT,
+    'dhcp': 0,
+    'ip': '',
+    'gateway': '',
+    'subnet': SUBNET_MASK,
+    'port': '',
+    'key': '1234567890'
+}
 
 class StoppableThread(threading.Thread):
     """Thread class with a stop() method. The thread itself has to check
@@ -36,6 +55,97 @@ class StoppableThread(threading.Thread):
 
     def stopped(self):
         return self._stop_event.is_set()
+
+def read_device_options(_app):
+
+    try:
+        _app.comm_port = _app.entry_serial_port.get()
+        device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+    except serial.serialutil.SerialException as e:
+        _app.config(cursor='watch')
+        CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
+        #CTkMessagebox(title="Info", message="단말에서 설정값을 읽어오고 있습니다. 잠시만 기다려주세요.")
+        #tkinter.messagebox.showinfo("Info", "This is a tkinter.messagebox!")
+        logging.debug('시리얼 예외 발생: ', e)
+    else:
+        #while not current_thread().stopped() or not app.stop_thread:
+        device.write('CNF_REQ\n'.encode())
+        msg = device.readline()
+
+        if msg:
+            logging.debug(f'수신: {msg}')
+            msg = msg.decode('utf-8')
+            msg = msg.strip()
+            logging.debug(f'수신 decoded: {msg}')
+            if msg.startswith('CNF_JSN') and msg.endswith('CNF_END'):
+                msg = msg[7:-7]
+                _app.plaintext_textbox.insert("0.0", msg)
+                options = json.loads(msg)
+                apply_options(options, _app)
+                logging.debug(f'수신: {msg}')
+                device.reset_input_buffer()
+        else:
+            logging.debug('수신: No Data')
+            CTkMessagebox(title="Info", message=f"단말에서 정보를 읽어올 수 없습니다.")
+
+    finally:
+        device.close()
+        device = None
+
+def write_device_options(_app):
+
+    try:
+        _app.comm_port = _app.entry_serial_port.get()
+        device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+    except serial.serialutil.SerialException as e:
+        _app.config(cursor='watch')
+        CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
+        logging.debug('시리얼 예외 발생: ', e)
+    else:
+        options = read_ui_options(_app)
+        str_options = json.dumps(options)
+
+        msg = bytes(f"CNF_WRT{str_options}CNF_END\n", encoding='utf-8')
+        written=device.write(msg)
+        logging.debug(f'송신: {msg}')
+        logging.debug(f'송신: {written} bytes')
+        time.sleep(0.3)
+    finally:
+        device.close()
+        device = None
+
+def apply_options(options, _app):
+    #app.entry_serial_port.insert(0, options["comm_port"])
+    if options['dhcp']:
+        _app.switch_var.set("DHCP")
+    else:
+        _app.switch_var.set("NO-DHCP")
+    _app.entry_server_ip.delete(0, "end")
+    _app.entry_server_ip.insert(0, options["ip"])
+    _app.entry_subnet.delete(0, "end")
+    _app.entry_subnet.insert(0, options["subnet"])
+    _app.entry_gateway.delete(0, "end")
+    _app.entry_gateway.insert(0, options["gateway"])
+    _app.entry_port.delete(0, "end")
+    _app.entry_port.insert(0, options["port"])
+    _app.entry_key.delete(0, "end")
+    _app.entry_key.insert(0, options["key"])
+
+def read_ui_options(_app):
+
+    options = {}
+    options['comm_port'] = _app.entry_serial_port.get()
+    if app.switch_var.get() == "DHCP":
+        options['dhcp'] = 1
+    else:
+        options['dhcp'] = 0
+    options['ip'] = app.entry_server_ip.get()
+    options['subnet'] = app.entry_subnet.get()
+    options['gateway'] = app.entry_gateway.get()
+    options['port'] = app.entry_port.get()
+    options['key'] = app.entry_key.get()
+
+    return options
 
 def receive_serial(_app):
     try:
@@ -68,108 +178,6 @@ def receive_serial(_app):
         device.close()
         device = None
 
-def init_enc_server(_app):
-    try:
-        host = _app.entry_server_ip.get()
-        port = _app.entry_enc_port.get()
-        _app.enc_server_socket = socket.socket()
-        _app.enc_server_socket.bind((host, int(port)))
-        _app.enc_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        _app.enc_server_socket.listen(100)
-    except Exception as e:
-        _app.enc_server_socket = None
-        print(e)
-        tkinter.messagebox.showerror("Error", "암호화 서버 초기화에 실패하였습니다.")
-        return None
-    else:
-        while True:
-            #_app.label_enc_status.configure(text="암호화서버 접속 대기 중")
-            #_app.label_enc_status.configure(fg_color="light green")
-            print("\n\nWaiting for encrytion client connection...")
-            conn, address = _app.enc_server_socket.accept()  # accept new connection
-            print("Connected from: " + str(address))
-
-            while True:
-                # receive data stream. 
-                # it won't accept data packet greater than 1024 bytes
-                print("conn.recv(1024)...")
-                data = conn.recv(1024)
-                if not data:
-                    #_app.label_enc_status.configure(text="암호화서버 중지됨")
-                    #_app.label_enc_status.configure(fg_color="grey")
-                    # break if data is not received or client closed connection
-                    break
-                print("Data received from client: ")
-                print(data)
-                if data.isalpha:
-                    data = data.decode()
-                _app.plaintext_textbox.insert("0.0", f"평문: {data}")
-                _app.plaintext_textbox.insert("0.0", '\n')
-
-                key = _app.entry_key.get()
-                keyb = key.encode()
-                keyb = keyb + KEY[len(keyb):]
-
-                ciphertext, tag, nonce = enc_aes(keyb, data.encode())
-                tnc = tag + nonce + ciphertext
-                _app.plaintext_textbox.insert("0.0", "암호문: ")
-                _app.plaintext_textbox.insert("1.6", tnc)
-                _app.plaintext_textbox.insert("0.0", '\n\n')
-
-                conn.send(tnc)  # send data to the client
-                print("cipher text sent to client: ")
-
-
-            conn.close()  # close the connection
-
-def init_dec_server(_app):
-    try:
-        host = _app.entry_server_ip.get()
-        port = _app.entry_dec_port.get()
-        _app.dec_server_socket = socket.socket()
-        _app.dec_server_socket.bind((host, int(port)))
-        _app.dec_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        _app.dec_server_socket.listen(100)
-    except Exception as e:
-        _app.dec_server_socket = None
-        print(e)
-        tkinter.messagebox.showerror("Error", "복호화 서버 초기화에 실패하였습니다.")
-        return None
-    else:
-        while True:
-            #_app.label_dec_status.configure(text="암호화서버 접속 대기 중")
-            #_app.label_dec_status.configure(fg_color="light green")
-            print("\n\nWaiting for decrypt client connection...")
-            conn, address = _app.dec_server_socket.accept()  # accept new connection
-            print("Connected from: " + str(address))
-
-            while True:
-                print("conn.recv(1024)...")
-                tnc = conn.recv(1024)
-                if not tnc:
-                    #_app.label_dec_status.configure(text="복호화서버 중지됨")
-                    #_app.label_dec_status.configure(fg_color="grey")
-                    break
-                print("Data received from decrypt client: ")
-                print(tnc)
-                _app.receive_textbox.insert("0.0", tnc)
-                _app.receive_textbox.insert("0.0", '\n')
-
-                key = _app.entry_key.get()
-                keyb = key.encode()
-                keyb = keyb + KEY[len(keyb):]
-
-                tag, nonce, ciphertext = tnc[:16], tnc[16:32], tnc[32:]
-                plaintext = dec_aes(keyb, ciphertext, tag, nonce)
-                _app.receive_textbox.insert("0.0", plaintext)
-                _app.receive_textbox.insert("0.0", '\n\n')
-
-                conn.send(plaintext)  # send data to the client
-                print("plaintext sent to client: ")
-
-
-            conn.close()  # close the connection
-
 
 class App(ctk.CTk):
 
@@ -181,6 +189,9 @@ class App(ctk.CTk):
         self.cipher = "AES"
         self.enc_server_socket = None
 
+        self.read_options_thread = None
+        self.stop_thread = False
+
         self.receive_plaintext_thread = None
         self.receive_ciphertext_thread = None
         self.data_to_send = None
@@ -190,6 +201,8 @@ class App(ctk.CTk):
 
         self.grid_columnconfigure((0, 1, 2), weight=1)
         self.grid_rowconfigure((0, 1, 2), weight=1)
+
+        self.options = OPTIONS
 
         self.sidebar_frame = ctk.CTkFrame(self, width=160, corner_radius=0)  #,
         self.sidebar_frame.grid(row=0, column=0, rowspan=50, sticky="nsew")
@@ -215,7 +228,7 @@ class App(ctk.CTk):
 
         self.entry_serial_port = ctk.CTkEntry(self.sidebar_frame)#, placeholder_text="COM2")
         self.entry_serial_port.grid(row=2, column=0, padx=10, pady=1, sticky="nw")
-        self.entry_serial_port.insert(0, COMM_PORT)
+        #self.entry_serial_port.insert(0, COMM_PORT)
 
         self.label_network = ctk.CTkLabel(self.sidebar_frame, text="단말 네트워크 설정")
         self.label_network.grid(row=9, column=0, padx=10, pady=(30,1), sticky="nw")
@@ -230,15 +243,20 @@ class App(ctk.CTk):
         self.entry_server_ip = ctk.CTkEntry(self.sidebar_frame)
         self.entry_server_ip.grid(row=11, column=0, padx=10, pady=0, sticky="nw")
 
-        self.label_subnet = ctk.CTkLabel(self.sidebar_frame, text="subnet mask")
-        self.label_subnet.grid(row=12, column=0, padx=15, pady=(1,0), sticky="nw")
-        self.entry_subnet = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{SUBNET_MASK}")
-        self.entry_subnet.grid(row=13, column=0, padx=10, pady=0, sticky="nw")
+        self.label_gateway = ctk.CTkLabel(self.sidebar_frame, text="gateway")
+        self.label_gateway.grid(row=12, column=0, padx=15, pady=(1,0), sticky="nw")
+        self.entry_gateway = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{GATEWAY}")
+        self.entry_gateway.grid(row=13, column=0, padx=10, pady=0, sticky="nw")
 
-        self.label_port = ctk.CTkLabel(self.sidebar_frame, text="복호화포트")
-        self.label_port.grid(row=15, column=0, padx=10, pady=(20,1), sticky="nw")
+        self.label_subnet = ctk.CTkLabel(self.sidebar_frame, text="subnet mask")
+        self.label_subnet.grid(row=14, column=0, padx=15, pady=(1,0), sticky="nw")
+        self.entry_subnet = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{SUBNET_MASK}")
+        self.entry_subnet.grid(row=15, column=0, padx=10, pady=0, sticky="nw")
+
+        self.label_port = ctk.CTkLabel(self.sidebar_frame, text="port")
+        self.label_port.grid(row=16, column=0, padx=15, pady=(1,0), sticky="nw")
         self.entry_port = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{PORT_DEC}")
-        self.entry_port.grid(row=16, column=0, padx=10, pady=1, sticky="nw")
+        self.entry_port.grid(row=17, column=0, padx=10, pady=0, sticky="nw")
 
         #self.label_dec_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="복호화 서버 중지됨")
         #self.label_dec_status.grid(row=17, column=0, padx=10, pady=(10,1), sticky="nw")
@@ -298,6 +316,18 @@ class App(ctk.CTk):
         self.receive_textbox.grid(row=2, column=0, padx=(20, 20), pady=(1, 55), sticky="nsew")
         #self.receive_textbox.configure(bg_color='blue', fg_color='blue', border_color='blue')
 
+    def get_options(self):
+        self.options['dhcp'] = self.switch_var.get()
+        self.options['ip'] = self.entry_ip.get()
+        self.options['port'] = self.entry_port.get()
+        self.options['key'] = self.entry_key.get()
+        self.options['gateway'] = self.entry_gateway.get()
+        self.options['subnet'] = self.entry_subnet.get()
+        return self.options
+    
+    def set_options(self, value):
+        self.options = value
+
     def load_file_event(self):
         self.filename = fdlg.askopenfilename()
         file_contents = None
@@ -314,10 +344,11 @@ class App(ctk.CTk):
         print("switch toggled, current value:", self.switch_var.get())
 
     def apply_option_event(self):
-        self.init_server_thread()
+        write_device_options(self)
 
     def read_option_event(self):
-        self.read_options_thread()
+        #self.init_options_thread()
+        read_device_options(self)
 
     def pop_up_msg(self, msg:str):
         win = ctk.CTkToplevel()
@@ -333,30 +364,13 @@ class App(ctk.CTk):
         btn = ctk.CTkButton(master=frame, text="OK", command=win.destroy)
         btn.pack(ipady=5,ipadx=5,pady=10,padx=10)
 
-    def init_server_thread(self):
-        if self.receive_plaintext_thread:
-            self.receive_plaintext_thread.stop()
-            self.receive_plaintext_thread.join()
-            self.receive_plaintext_thread = None
-
-        self.receive_plaintext_thread = StoppableThread(target=init_enc_server,args=(self,))
-        self.receive_plaintext_thread.start()
-
-        if self.receive_ciphertext_thread:
-            self.receive_ciphertext_thread.stop()
-            self.receive_ciphertext_thread.join()
-            self.receive_ciphertext_thread = None
-
-        self.receive_ciphertext_thread = StoppableThread(target=init_dec_server,args=(self,))
-        self.receive_ciphertext_thread.start()
-
-    def read_options_thread(self):
+    def init_options_thread(self):
         if self.read_options_thread:
             self.read_options_thread.stop()
             self.read_options_thread.join()
             self.read_options_thread = None
 
-        self.read_options_thread = StoppableThread(target=receive_serial,args=(self,))
+        self.read_options_thread = StoppableThread(target=read_device_options,args=(self,))
         self.read_options_thread.start()
 
     def receive_button_dummy_event(self):
@@ -388,26 +402,32 @@ class App(ctk.CTk):
     def sidebar_button_event(self):
         print("sidebar_button click")
 
+
 if __name__ == "__main__":
 
     app = App()
-    #app.config(cursor='watch')
 
-    #CTkMessagebox(title="Info", message="This is a CTkMessagebox!")
-    tkinter.messagebox.showinfo("Info", "This is a tkinter.messagebox!")
+    #with open("k2_config.txt", "r") as f:
+    #    lines = f.readlines()
+    #    comm_port = lines[0].split("comm:")[1].strip()
+    #    dhcp = lines[1].split("dhcp:")[1].strip()
+    #    ip = lines[2].split("ip:")[1].strip()
+    #    subnet = lines[3].split("subnet:")[1].strip()
+    #    port = lines[4].split("port:")[1].strip()
+    #    key = lines[5].split("key:")[1].strip()
 
-    with open("k2_config.txt", "r") as f:
-        lines = f.readlines()
-        comm_port = lines[0].split("comm:")[1].strip()
-        dhcp = lines[1].split("dhcp:")[1].strip()
-        ip = lines[2].split("ip:")[1].strip()
-        subnet = lines[3].split("subnet:")[1].strip()
-        port = lines[4].split("port:")[1].strip()
-        key = lines[5].split("key:")[1].strip()
+    #app.switch_var = ctk.StringVar(value="NO-DHCP")
+
+    options = app.options
+    comm_port = options['comm_port']
+    dhcp = options['dhcp']
+    ip = options['ip']
+    subnet = options['subnet']
+    port = options['port']
+    key = options['key']
 
     app.entry_serial_port.insert(0, comm_port)
-    #app.switch_var = ctk.StringVar(value="NO-DHCP")
-    if dhcp == "true":
+    if options['dhcp']:
         app.switch_var.set("DHCP")
     else:
         app.switch_var.set("NO-DHCP")
@@ -416,7 +436,6 @@ if __name__ == "__main__":
     app.entry_port.insert(0, port)
     app.entry_key.insert(0, key)
 
-    #app.init_server_thread()
-    #app.init_comm_thread()
-
     app.mainloop()
+
+    app.stop_thread = True
