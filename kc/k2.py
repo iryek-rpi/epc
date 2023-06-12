@@ -56,6 +56,55 @@ class StoppableThread(threading.Thread):
     def stopped(self):
         return self._stop_event.is_set()
 
+def init_connection(_app):
+    try:
+        if _app.c_socket:
+            _app.c_socket.close()
+            _app.c_socket = None
+        _ip = _app.entry_ip.get()
+        _port = _app.entry_port.get()
+        _sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _sock.connect((_ip, int(_port)))  # connect to the server
+    except socket.error:
+        if _sock:
+            _sock.close()
+            _app.c_socket = None
+        return None
+    else:
+        _app.c_socket = _sock
+        #_app.label_enc_status.configure(text="연결됨")
+        #_app.label_enc_status.configure(fg_color="green")
+        return _sock
+
+def send_plaintext(_app, plaintext):
+    msg = f'TEXT{plaintext}'
+    _app.history_textbox.insert('0.0', '요청: ' + plaintext)
+    _app.history_textbox.insert('0.0', '\n')
+
+    _app.c_socket.send(msg.encode())
+    tnc = _app.c_socket.recv(1024)
+
+    _app.ciphertext = tnc
+    _app.ciphertextbox.delete("1.0", "end-1c")
+    _app.ciphertextbox.insert(tkinter.END, tnc)
+
+    _app.history_textbox.insert('0.0', '응답: ' + _app.ciphertext)
+    _app.history_textbox.insert('0.0', '\n\n')
+
+def send_ciphertext(_app, ciphertext):
+    msg = f'CIPH{ciphertext}'
+    _app.history_textbox.insert('0.0', '요청: ' + ciphertext)
+    _app.history_textbox.insert('0.0', '\n')
+
+    _app.c_socket.send(msg.encode())
+    plaintext = _app.c_socket.recv(1024)
+
+    _app.entry_dectext.delete("1.0", "end-1c")
+    _app.entry_dectext.insert(tkinter.END, plaintext)
+
+    _app.history_textbox.insert('0.0', '응답: ' + plaintext)
+    _app.history_textbox.insert('0.0', '\n\n')
+
 def read_device_options(_app):
 
     try:
@@ -154,7 +203,7 @@ class App(ctk.CTk):
         self.comm_port = ''
         self.comm_thread=None
         self.cipher = "AES"
-        self.enc_server_socket = None
+        self.c_socket = None
 
         self.read_options_thread = None
         self.stop_thread = False
@@ -263,8 +312,9 @@ class App(ctk.CTk):
 
         self.label_ciphertext = ctk.CTkLabel(self.send_frame, text="암호문:")
         self.label_ciphertext.grid(row=3, column=0, padx=20, pady=(30, 0), sticky="nw")
-        self.entry_ciphertext = ctk.CTkTextbox(self.send_frame, width=500)
-        self.entry_ciphertext.grid(row=3, column=0, padx=70, pady=(30,0), sticky="nw")
+        self.ciphertextbox = ctk.CTkTextbox(self.send_frame, width=500, border_width = 2, border_color='gray', fg_color='light gray')
+        self.ciphertextbox.grid(row=3, column=0, padx=70, pady=(30,0), sticky="nw")
+        self.ciphertextbox.configure(state='disabled')
 
         self.dnc_button = ctk.CTkButton(self.send_frame, width=200, command=self.dec_button_event)
         self.dnc_button.configure(text="복호화 요청", fg_color='#555599')
@@ -272,8 +322,9 @@ class App(ctk.CTk):
 
         self.label_dectext = ctk.CTkLabel(self.send_frame, text="복호문:")
         self.label_dectext.grid(row=5, column=0, padx=20, pady=(30, 0), sticky="nw")
-        self.entry_dectext = ctk.CTkEntry(self.send_frame, width=500)
+        self.entry_dectext = ctk.CTkEntry(self.send_frame, width=500, border_width = 2, border_color='gray', fg_color='light gray')
         self.entry_dectext.grid(row=5, column=0, padx=70, pady=(30,0), sticky="nw")
+        self.entry_dectext.configure(state='disabled')
 
         #=================================================================================
         # create textbox
@@ -281,9 +332,9 @@ class App(ctk.CTk):
         self.history_button.configure(text="처리 기록 삭제")#, bg_color='#889933', fg_color='#889933')
         self.history_button.grid(row=0, column=0, padx=30, pady=(15, 5), sticky="nswe")
 
-        self.history_textbox = ctk.CTkTextbox(self.receive_frame, width=420)#, border_color='blue', bg_color='blue')
+        self.history_textbox = ctk.CTkTextbox(self.receive_frame, width=420, border_width = 2, border_color='gray', fg_color='light gray')
         self.history_textbox.grid(row=2, column=0, padx=(20, 20), pady=(40, 60), sticky="nsew")
-        self.history_textbox.insert('0.0', "처리 기록\n")
+        #self.history_textbox.insert('0.0', "처리 기록\n")
         self.history_textbox.configure(state='disabled')
         #self.receive_textbox.configure(bg_color='blue', fg_color='blue', border_color='blue')
 
@@ -353,12 +404,41 @@ class App(ctk.CTk):
         self.read_options_thread.start()
 
     def enc_button_event(self):
-        #self.plaintext_textbox.delete("1.0", "end-1c")
-        pass
+        plaintext = self.entry_plaintext.get("1.0", "end-1c")
+        if not plaintext:
+            CTkMessagebox(title="Info", message=f"암호화할 평문을 입력하세요")
+            return
+
+        if not self.c_socket:
+            if not init_connection(self):
+                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
+                return
+
+        if not self.c_socket.is_connected():
+            if not init_connection(self):
+                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
+                return
+        
+        send_plaintext(self, plaintext)
+
 
     def dec_button_event(self):
-        #self.plaintext_textbox.delete("1.0", "end-1c")
-        pass
+        ciphertext = self.ciphertextbox.get("1.0", "end-1c")
+        if not ciphertext:
+            CTkMessagebox(title="Info", message=f"암호문이 존재하지 않습니다.")
+            return
+
+        if not self.c_socket:
+            if not init_connection(self):
+                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
+                return
+
+        if not self.c_socket.is_connected():
+            if not init_connection(self):
+                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
+                return
+        
+        send_ciphertext(self, ciphertext)
 
     def history_clear_event(self):
         self.history_textbox.configure(state='normal')
@@ -366,7 +446,9 @@ class App(ctk.CTk):
         self.history_textbox.configure(state='disabled')
 
     def clear_button_event(self):
-        self.plaintext_textbox.delete("1.0", "end-1c")
+        self.entry_plaintext.delete("1.0", "end-1c")
+        self.ciphertextbox.delete("1.0", "end-1c")
+        self.entry_dectext.delete("1.0", "end-1c")
 
     def change_cipher_event(self, new_cipher: str):
         self.cipher = new_cipher
