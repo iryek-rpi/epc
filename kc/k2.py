@@ -62,7 +62,7 @@ def read_device_options(_app):
         _app.comm_port = _app.entry_serial_port.get()
         device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
     except serial.serialutil.SerialException as e:
-        _app.config(cursor='watch')
+        #_app.config(cursor='watch')
         CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
         #CTkMessagebox(title="Info", message="단말에서 설정값을 읽어오고 있습니다. 잠시만 기다려주세요.")
         #tkinter.messagebox.showinfo("Info", "This is a tkinter.messagebox!")
@@ -98,7 +98,6 @@ def write_device_options(_app):
         _app.comm_port = _app.entry_serial_port.get()
         device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
     except serial.serialutil.SerialException as e:
-        _app.config(cursor='watch')
         CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
         logging.debug('시리얼 예외 발생: ', e)
     else:
@@ -120,8 +119,8 @@ def apply_options(options, _app):
         _app.switch_var.set("DHCP")
     else:
         _app.switch_var.set("NO-DHCP")
-    _app.entry_server_ip.delete(0, "end")
-    _app.entry_server_ip.insert(0, options["ip"])
+    _app.entry_ip.delete(0, "end")
+    _app.entry_ip.insert(0, options["ip"])
     _app.entry_subnet.delete(0, "end")
     _app.entry_subnet.insert(0, options["subnet"])
     _app.entry_gateway.delete(0, "end")
@@ -139,7 +138,7 @@ def read_ui_options(_app):
         options['dhcp'] = 1
     else:
         options['dhcp'] = 0
-    options['ip'] = app.entry_server_ip.get()
+    options['ip'] = app.entry_ip.get()
     options['subnet'] = app.entry_subnet.get()
     options['gateway'] = app.entry_gateway.get()
     options['port'] = app.entry_port.get()
@@ -197,7 +196,7 @@ class App(ctk.CTk):
         self.data_to_send = None
 
         self.title("데이터암호화 모듈 테스트 프로그램")
-        self.geometry(f"{1150}x{780}")
+        self.geometry(f"{1350}x{700}")
 
         self.grid_columnconfigure((0, 1, 2), weight=1)
         self.grid_rowconfigure((0, 1, 2), weight=1)
@@ -214,7 +213,7 @@ class App(ctk.CTk):
         self.receive_frame.grid(row=0, column=2, rowspan=3, sticky="nsew")
 
         #self.sidebar_frame.grid_rowconfigure(2, weight=1)
-        self.send_frame.grid_rowconfigure(2, weight=1)
+        self.send_frame.grid_rowconfigure(6, weight=1)
         self.receive_frame.grid_rowconfigure(2, weight=1)
 
 
@@ -227,8 +226,7 @@ class App(ctk.CTk):
         self.label_serial.grid(row=1, column=0, padx=10, pady=(20, 1), sticky="nw")
 
         self.entry_serial_port = ctk.CTkEntry(self.sidebar_frame)#, placeholder_text="COM2")
-        self.entry_serial_port.grid(row=2, column=0, padx=10, pady=1, sticky="nw")
-        #self.entry_serial_port.insert(0, COMM_PORT)
+        self.entry_serial_port.grid(row=2, column=0, padx=(10,20), pady=1, sticky="nw")
 
         self.label_network = ctk.CTkLabel(self.sidebar_frame, text="단말 네트워크 설정")
         self.label_network.grid(row=9, column=0, padx=10, pady=(30,1), sticky="nw")
@@ -236,21 +234,21 @@ class App(ctk.CTk):
         self.label_ip = ctk.CTkLabel(self.sidebar_frame, text="IP")
         self.label_ip.grid(row=10, column=0, padx=15, pady=(1,0), sticky="nw")
         self.switch_var = ctk.StringVar(value="NO-DHCP")
-        self.dhcp = ctk.CTkSwitch(self.sidebar_frame, text="DHCP", command=self.switch_event,
+        self.dhcp = ctk.CTkSwitch(self.sidebar_frame, text="DHCP", command=self.dhcp_event,
                                    variable=self.switch_var, onvalue="DHCP", offvalue="NO-DHCP")
         self.dhcp.grid(row=10, column=0, padx=80, pady=(1,0), sticky="nw")
 
-        self.entry_server_ip = ctk.CTkEntry(self.sidebar_frame)
-        self.entry_server_ip.grid(row=11, column=0, padx=10, pady=0, sticky="nw")
+        self.entry_ip = ctk.CTkEntry(self.sidebar_frame)
+        self.entry_ip.grid(row=11, column=0, padx=10, pady=0, sticky="nw")
 
         self.label_gateway = ctk.CTkLabel(self.sidebar_frame, text="gateway")
         self.label_gateway.grid(row=12, column=0, padx=15, pady=(1,0), sticky="nw")
-        self.entry_gateway = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{GATEWAY}")
+        self.entry_gateway = ctk.CTkEntry(self.sidebar_frame)
         self.entry_gateway.grid(row=13, column=0, padx=10, pady=0, sticky="nw")
 
         self.label_subnet = ctk.CTkLabel(self.sidebar_frame, text="subnet mask")
         self.label_subnet.grid(row=14, column=0, padx=15, pady=(1,0), sticky="nw")
-        self.entry_subnet = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"{SUBNET_MASK}")
+        self.entry_subnet = ctk.CTkEntry(self.sidebar_frame )
         self.entry_subnet.grid(row=15, column=0, padx=10, pady=0, sticky="nw")
 
         self.label_port = ctk.CTkLabel(self.sidebar_frame, text="port")
@@ -281,39 +279,44 @@ class App(ctk.CTk):
         self.option_button.grid(row=34, column=0, padx=10, pady=(30, 1), sticky="nw")
 
         #=================================================================================
-        # create textbox
-        #self.file_button = ctk.CTkButton(master=self.inputfile_frame,
-        #                                 command=self.load_file_event)
-        self.send_button = ctk.CTkButton(self.send_frame, command=self.send_button_event)
-        self.send_button.configure(text="암호화 요청 데이터와 응답 암호문")
-        self.send_button.grid(row=0, column=0, padx=30, pady=(15, 5), sticky="nswe")
-
-        self.clear_button = ctk.CTkButton(self.send_frame, command=self.clear_button_event)
-
+        # Send Frame
+        self.clear_button = ctk.CTkButton(self.send_frame, width=20, command=self.clear_button_event)
         self.clear_button.configure(text="내용 지우기")
-        self.clear_button.grid(row=0, column=1, padx=30, pady=(15, 5), sticky="nswe")
-        self.label_data2send = ctk.CTkLabel(self.send_frame, text="")  #,
-        #fg_color='blue')
-        self.label_data2send.grid(row=1, column=0, padx=20, pady=(1, 5), sticky="nw")
+        self.clear_button.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="we")
 
-        self.plaintext_textbox = ctk.CTkTextbox(self.send_frame, width=450)
-        self.plaintext_textbox.grid(row=2, column=0, columnspan=2, padx=(20, 20), pady=(1, 55), sticky="nsew")
+        self.label_plaintext = ctk.CTkLabel(self.send_frame, text="평    문:")
+        self.label_plaintext.grid(row=1, column=0, padx=20, pady=(40, 0), sticky="nw")
+        self.entry_plaintext = ctk.CTkEntry(self.send_frame, width=500, placeholder_text="16자 이내의 암호화할 데이터를 입력하세요")
+        self.entry_plaintext.grid(row=1, column=0, padx=70, pady=(40,0), sticky="nw")
+
+        self.enc_button = ctk.CTkButton(self.send_frame, width=200, command=self.enc_button_event)
+        self.enc_button.configure(text="암호화 요청", bg_color='#aa3333', fg_color='#bb3333')
+        self.enc_button.grid(row=2, column=0, padx=20, pady=(30, 0))#, sticky="we")
+
+        self.label_ciphertext = ctk.CTkLabel(self.send_frame, text="암호문:")
+        self.label_ciphertext.grid(row=3, column=0, padx=20, pady=(30, 0), sticky="nw")
+        self.entry_ciphertext = ctk.CTkTextbox(self.send_frame, width=500)
+        self.entry_ciphertext.grid(row=3, column=0, padx=70, pady=(30,0), sticky="nw")
+
+        self.dnc_button = ctk.CTkButton(self.send_frame, width=200, command=self.dec_button_event)
+        self.dnc_button.configure(text="복호화 요청", fg_color='#555599')
+        self.dnc_button.grid(row=4, column=0, padx=20, pady=(30, 0))#, sticky="we")
+
+        self.label_dectext = ctk.CTkLabel(self.send_frame, text="복호문:")
+        self.label_dectext.grid(row=5, column=0, padx=20, pady=(30, 0), sticky="nw")
+        self.entry_dectext = ctk.CTkEntry(self.send_frame, width=500)
+        self.entry_dectext.grid(row=5, column=0, padx=70, pady=(30,0), sticky="nw")
 
         #=================================================================================
         # create textbox
-        self.receive_button = ctk.CTkButton(self.receive_frame,
-                                            command=self.receive_button_dummy_event)
-        #self.receive_button = ctk.CTkLabel(self.receive_frame, text="수신 데이터")
+        self.history_button = ctk.CTkButton(self.receive_frame, command=self.history_clear_event)
+        self.history_button.configure(text="처리 기록 삭제")#, bg_color='#889933', fg_color='#889933')
+        self.history_button.grid(row=0, column=0, padx=30, pady=(15, 5), sticky="nswe")
 
-        self.receive_button.configure(text="복호화 요청 데이터와 응답 평문", bg_color='#889933', fg_color='#889933')
-        self.receive_button.grid(row=0, column=0, padx=30, pady=(15, 5), sticky="nswe")
-
-        self.label_filename = ctk.CTkLabel(self.receive_frame, text="")  #,
-        #fg_color='blue')
-        self.label_filename.grid(row=1, column=0, padx=10, pady=(1, 5), sticky="nw")
-
-        self.receive_textbox = ctk.CTkTextbox(self.receive_frame, width=420)#, border_color='blue', bg_color='blue')
-        self.receive_textbox.grid(row=2, column=0, padx=(20, 20), pady=(1, 55), sticky="nsew")
+        self.history_textbox = ctk.CTkTextbox(self.receive_frame, width=420)#, border_color='blue', bg_color='blue')
+        self.history_textbox.grid(row=2, column=0, padx=(20, 20), pady=(40, 60), sticky="nsew")
+        self.history_textbox.insert('0.0', "처리 기록\n")
+        self.history_textbox.configure(state='disabled')
         #self.receive_textbox.configure(bg_color='blue', fg_color='blue', border_color='blue')
 
     def get_options(self):
@@ -340,7 +343,15 @@ class App(ctk.CTk):
     def send_button_event(self):
         return
 
-    def switch_event(self):
+    def dhcp_event(self):
+        if self.switch_var.get() == 'NO-DHCP':
+            self.entry_ip.configure(state='disabled')
+            self.entry_gateway.configure(state='disabled')
+            self.entry_subnet.configure(state='disabled')
+        else:
+            self.entry_ip.configure(state='normal')
+            self.entry_gateway.configure(state='normal')
+            self.entry_subnet.configure(state='normal')
         print("switch toggled, current value:", self.switch_var.get())
 
     def apply_option_event(self):
@@ -373,24 +384,21 @@ class App(ctk.CTk):
         self.read_options_thread = StoppableThread(target=read_device_options,args=(self,))
         self.read_options_thread.start()
 
-    def receive_button_dummy_event(self):
+    def enc_button_event(self):
+        #self.plaintext_textbox.delete("1.0", "end-1c")
         pass
+
+    def dec_button_event(self):
+        #self.plaintext_textbox.delete("1.0", "end-1c")
+        pass
+
+    def history_clear_event(self):
+        self.history_textbox.configure(state='normal')
+        self.history_textbox.delete("1.0", "end-1c")
+        self.history_textbox.configure(state='disabled')
 
     def clear_button_event(self):
         self.plaintext_textbox.delete("1.0", "end-1c")
-        self.label_data2send.configure(text="")
-
-    def change_speed_event(self, new_speed: str):
-        self.comm['baudrate'] = new_speed
-
-    def change_parity_event(self, new_parity: str):
-        self.comm['parity'] = new_parity
-
-    def change_databits_event(self, new_databits: str):
-        self.comm['bytesize'] = new_databits
-
-    def change_stopbits_event(self, new_stopbits: str):
-        self.comm['stopbits'] = new_stopbits
 
     def change_cipher_event(self, new_cipher: str):
         self.cipher = new_cipher
@@ -398,9 +406,6 @@ class App(ctk.CTk):
     def change_scaling_event(self, new_scaling: str):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
         ctk.set_widget_scaling(new_scaling_float)
-
-    def sidebar_button_event(self):
-        print("sidebar_button click")
 
 
 if __name__ == "__main__":
@@ -431,7 +436,7 @@ if __name__ == "__main__":
         app.switch_var.set("DHCP")
     else:
         app.switch_var.set("NO-DHCP")
-    app.entry_server_ip.insert(0, ip)
+    app.entry_ip.insert(0, ip)
     app.entry_subnet.insert(0, subnet)
     app.entry_port.insert(0, port)
     app.entry_key.insert(0, key)
