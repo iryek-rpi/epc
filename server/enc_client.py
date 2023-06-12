@@ -210,10 +210,6 @@ class App(ctk.CTk):
 
     def send_button_event(self):
         send_plaintext(self)
-        #if not self.send_thread:
-        #    self.init_client_thread()
-
-        #self.data_to_send = self.send_textbox.get("1.0", "end-1c")
 
     def decrypt_event(self):
         decrypt_ciphertext(self)
@@ -231,15 +227,6 @@ class App(ctk.CTk):
 
         btn = ctk.CTkButton(master=frame, text="OK", command=win.destroy)
         btn.pack(ipady=5,ipadx=5,pady=10,padx=10)
-
-    def init_client_thread(self):
-        if self.send_thread:
-            self.send_thread.stop()
-            self.send_thread.join()
-            self.send_thread = None
-
-        self.send_thread = StoppableThread(target=send_data,args=(self,))
-        self.send_thread.start()
 
     def clear_button_event(self):
         self.send_textbox.delete("1.0", "end-1c")
