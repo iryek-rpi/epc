@@ -78,18 +78,25 @@ def init_connection(_app):
 
 def send_plaintext(_app, plaintext):
     msg = f'TEXT{plaintext}'
+    _app.history_textbox.configure(state='normal')
     _app.history_textbox.insert('0.0', '요청: ' + plaintext)
     _app.history_textbox.insert('0.0', '\n')
+    _app.history_textbox.configure(state='disabled')
 
     _app.c_socket.send(msg.encode())
-    tnc = _app.c_socket.recv(1024)
+    #tnc = _app.c_socket.recv(1024)
+    tnc = 'abc'
 
     _app.ciphertext = tnc
+    _app.ciphertextbox.configure(state='normal')
     _app.ciphertextbox.delete("1.0", "end-1c")
     _app.ciphertextbox.insert(tkinter.END, tnc)
+    _app.ciphertextbox.configure(state='disabled')
 
+    _app.history_textbox.configure(state='normal')
     _app.history_textbox.insert('0.0', '응답: ' + _app.ciphertext)
     _app.history_textbox.insert('0.0', '\n\n')
+    _app.history_textbox.configure(state='disabled')
 
 def send_ciphertext(_app, ciphertext):
     msg = f'CIPH{ciphertext}'
@@ -128,7 +135,6 @@ def read_device_options(_app):
             logging.debug(f'수신 decoded: {msg}')
             if msg.startswith('CNF_JSN') and msg.endswith('CNF_END'):
                 msg = msg[7:-7]
-                _app.plaintext_textbox.insert("0.0", msg)
                 options = json.loads(msg)
                 apply_options(options, _app)
                 logging.debug(f'수신: {msg}')
@@ -301,7 +307,7 @@ class App(ctk.CTk):
         self.clear_button.configure(text="내용 지우기")
         self.clear_button.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="we")
 
-        self.label_plaintext = ctk.CTkLabel(self.send_frame, text="평    문:")
+        self.label_plaintext = ctk.CTkLabel(self.send_frame, text="평  문:")
         self.label_plaintext.grid(row=1, column=0, padx=20, pady=(40, 0), sticky="nw")
         self.entry_plaintext = ctk.CTkEntry(self.send_frame, width=500, placeholder_text="16자 이내의 암호화할 데이터를 입력하세요")
         self.entry_plaintext.grid(row=1, column=0, padx=70, pady=(40,0), sticky="nw")
@@ -357,7 +363,7 @@ class App(ctk.CTk):
             file_contents = f.read()
         file_info = f'{self.filename} : {len(file_contents)} bytes'
         self.label_filename.configure(text=file_info)
-        self.plaintext_textbox.insert("0.0", file_contents)
+        self.entry_plaintext.insert("0.0", file_contents)
 
     def send_button_event(self):
         return
@@ -404,7 +410,7 @@ class App(ctk.CTk):
         self.read_options_thread.start()
 
     def enc_button_event(self):
-        plaintext = self.entry_plaintext.get("1.0", "end-1c")
+        plaintext = self.entry_plaintext.get()
         if not plaintext:
             CTkMessagebox(title="Info", message=f"암호화할 평문을 입력하세요")
             return
@@ -414,11 +420,6 @@ class App(ctk.CTk):
                 CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
                 return
 
-        if not self.c_socket.is_connected():
-            if not init_connection(self):
-                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
-                return
-        
         send_plaintext(self, plaintext)
 
 
@@ -433,11 +434,6 @@ class App(ctk.CTk):
                 CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
                 return
 
-        if not self.c_socket.is_connected():
-            if not init_connection(self):
-                CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
-                return
-        
         send_ciphertext(self, ciphertext)
 
     def history_clear_event(self):
