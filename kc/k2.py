@@ -146,38 +146,6 @@ def read_ui_options(_app):
 
     return options
 
-def receive_serial(_app):
-    try:
-        _app.comm_port = _app.entry_serial_port.get()
-        device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.5) #0.5sec
-    except serial.serialutil.SerialException as e:
-        print('시리얼 예외 발생: ', e)
-    else:
-        while not current_thread().stopped():
-            data = device.read(1024)
-            if data:
-                _app.plaintext_textbox.insert("0.0", data.decode())
-                print('수신: ', data)
-                device.reset_input_buffer()
-                device.write('READY_0\n'.encode())
-                break
-                #print(data)
-            elif not data:
-                print('수신: No Data')
-            elif _app.data_to_send:
-                _written = device.write(_app.data_to_send.encode())
-                _app.data_to_send = None
-                time.sleep(0.2)
-                device.reset_input_buffer()
-
-                print(f"written: {_written}")
-                msg = f"{_written}바이트 전송 완료"
-                _app.label_data2send.configure(text=msg)
-
-        device.close()
-        device = None
-
-
 class App(ctk.CTk):
 
     def __init__(self):
