@@ -76,42 +76,6 @@ def init_connection(_app):
         #_app.label_enc_status.configure(fg_color="green")
         return _sock
 
-def send_plaintext(_app, plaintext):
-    msg = f'TEXT{plaintext}'
-    _app.history_textbox.configure(state='normal')
-    _app.history_textbox.insert('0.0', '요청: ' + plaintext)
-    _app.history_textbox.insert('0.0', '\n')
-    _app.history_textbox.configure(state='disabled')
-
-    _app.c_socket.send(msg.encode())
-    #tnc = _app.c_socket.recv(1024)
-    tnc = 'abc'
-
-    _app.ciphertext = tnc
-    _app.ciphertextbox.configure(state='normal')
-    _app.ciphertextbox.delete("1.0", "end-1c")
-    _app.ciphertextbox.insert(tkinter.END, tnc)
-    _app.ciphertextbox.configure(state='disabled')
-
-    _app.history_textbox.configure(state='normal')
-    _app.history_textbox.insert('0.0', '응답: ' + _app.ciphertext)
-    _app.history_textbox.insert('0.0', '\n\n')
-    _app.history_textbox.configure(state='disabled')
-
-def send_ciphertext(_app, ciphertext):
-    msg = f'CIPH{ciphertext}'
-    _app.history_textbox.insert('0.0', '요청: ' + ciphertext)
-    _app.history_textbox.insert('0.0', '\n')
-
-    _app.c_socket.send(msg.encode())
-    plaintext = _app.c_socket.recv(1024)
-
-    _app.entry_dectext.delete("1.0", "end-1c")
-    _app.entry_dectext.insert(tkinter.END, plaintext)
-
-    _app.history_textbox.insert('0.0', '응답: ' + plaintext)
-    _app.history_textbox.insert('0.0', '\n\n')
-
 def read_device_options(_app):
 
     try:
@@ -201,6 +165,16 @@ def read_ui_options(_app):
 
     return options
 
+def limit_key(sv):
+    content = sv.get()
+
+    if len(content) > 16: 
+        CTkMessagebox(title="알림", message="키는 16자 이내로 입력하세요.", icon="info")
+        sv.set(content[:16])
+        return False
+
+    return True
+
 class App(ctk.CTk):
 
     def __init__(self):
@@ -209,6 +183,7 @@ class App(ctk.CTk):
         self.comm_port = ''
         self.comm_thread=None
         self.cipher = "AES"
+        self.ciphertext = None
         self.c_socket = None
 
         self.read_options_thread = None
@@ -282,9 +257,12 @@ class App(ctk.CTk):
         #self.label_dec_status = ctk.CTkLabel(self.sidebar_frame, fg_color='grey', text="복호화 서버 중지됨")
         #self.label_dec_status.grid(row=17, column=0, padx=10, pady=(10,1), sticky="nw")
 
-        self.label_key = ctk.CTkLabel(self.sidebar_frame, text="암호화 키(8-16자리)")
+        self.sv_key = ctk.StringVar()
+        self.sv_key.trace("w", lambda name, index, mode, sv=self.sv_key: limit_key(sv))
+        self.label_key = ctk.CTkLabel(self.sidebar_frame, text="암호화 키(16글자 이내)")
         self.label_key.grid(row=30, column=0, padx=10, pady=(30,1), sticky="nw")
-        self.entry_key = ctk.CTkEntry(self.sidebar_frame, fg_color="#00c177", text_color='white', placeholder_text="12345678")
+        self.entry_key = ctk.CTkEntry(self.sidebar_frame, textvariable=self.sv_key,
+                                      fg_color="#00c177", text_color='white', placeholder_text="12345678")
         self.entry_key.grid(row=31, column=0, padx=10, pady=1, sticky="nw")
 
         self.label_cipher = ctk.CTkLabel(self.sidebar_frame, text="암호화 방식:")  #,
@@ -409,6 +387,47 @@ class App(ctk.CTk):
         self.read_options_thread = StoppableThread(target=read_device_options,args=(self,))
         self.read_options_thread.start()
 
+    def send_plaintext(self, plaintext):
+        msg = f'TEXT{plaintext}'
+        self.history_textbox.configure(state='normal')
+        self.history_textbox.insert('0.0', '요청: ' + plaintext)
+        self.history_textbox.insert('0.0', '\n')
+        self.history_textbox.configure(state='disabled')
+
+        self.c_socket.send(msg.encode())
+        iv_c = self.c_socket.recv(64)
+
+        self.ciphertext = iv_c
+        self.ciphertextbox.configure(state='normal')
+        self.ciphertextbox.delete("1.0", "end-1c")
+        self.ciphertextbox.insert(tkinter.END, iv_c)
+        self.ciphertextbox.configure(state='disabled')
+
+        self.history_textbox.configure(state='normal')
+        self.history_textbox.insert('0.0', '응답: ' + self.ciphertext)
+        self.history_textbox.insert('0.0', '\n\n')
+        self.history_textbox.configure(state='disabled')
+
+    def send_ciphertext(self, ciphertext):
+        msg = f'CIPH{ciphertext}'
+        self.history_textbox.configure(state='normal')
+        self.history_textbox.insert('0.0', '요청: ' + ciphertext)
+        self.history_textbox.insert('0.0', '\n')
+        self.history_textbox.configure(state='disabled')
+
+        self.c_socket.send(msg.encode())
+        plaintext = self.c_socket.recv(1024)
+
+        self.entry_dectext.configure(state='normal')
+        self.entry_dectext.delete(0, "end")
+        self.entry_dectext.insert(tkinter.END, plaintext)
+        self.entry_dectext.configure(state='disabled')
+
+        self.history_textbox.configure(state='normal')
+        self.history_textbox.insert('0.0', '응답: ' + plaintext)
+        self.history_textbox.insert('0.0', '\n\n')
+        self.history_textbox.configure(state='disabled')
+
     def enc_button_event(self):
         plaintext = self.entry_plaintext.get()
         if not plaintext:
@@ -420,7 +439,7 @@ class App(ctk.CTk):
                 CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
                 return
 
-        send_plaintext(self, plaintext)
+        self.send_plaintext(plaintext)
 
 
     def dec_button_event(self):
