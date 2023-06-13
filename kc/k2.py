@@ -56,26 +56,6 @@ class StoppableThread(threading.Thread):
     def stopped(self):
         return self._stop_event.is_set()
 
-def init_connection(_app):
-    try:
-        if _app.c_socket:
-            _app.c_socket.close()
-            _app.c_socket = None
-        _ip = _app.entry_ip.get()
-        _port = _app.entry_port.get()
-        _sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        _sock.connect((_ip, int(_port)))  # connect to the server
-    except socket.error:
-        if _sock:
-            _sock.close()
-            _app.c_socket = None
-        return None
-    else:
-        _app.c_socket = _sock
-        #_app.label_enc_status.configure(text="연결됨")
-        #_app.label_enc_status.configure(fg_color="green")
-        return _sock
-
 def read_device_options(_app):
 
     try:
@@ -358,6 +338,10 @@ class App(ctk.CTk):
         print("switch toggled, current value:", self.switch_var.get())
 
     def apply_option_event(self):
+        if self.c_socket:
+            self.c_socket.close()
+            self.c_socket = None
+
         write_device_options(self)
 
     def read_option_event(self):
@@ -387,6 +371,31 @@ class App(ctk.CTk):
         self.read_options_thread = StoppableThread(target=read_device_options,args=(self,))
         self.read_options_thread.start()
 
+    def init_connection(self):
+        try:
+            if self.c_socket:
+                self.c_socket.close()
+                self.c_socket = None
+            _ip = self.entry_ip.get()
+            _port = self.entry_port.get()
+            _sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            _sock.connect((_ip, int(_port)))  # connect to the server
+        except socket.error:
+            if _sock:
+                _sock.close()
+                self.c_socket = None
+            return None
+        except ValueError:
+            if _sock:
+                _sock.close()
+                self.c_socket = None
+            return None
+        else:
+            self.c_socket = _sock
+            #_app.label_enc_status.configure(text="연결됨")
+            #_app.label_enc_status.configure(fg_color="green")
+            return _sock
+
     def send_plaintext(self, plaintext):
         msg = f'TEXT{plaintext}'
         self.history_textbox.configure(state='normal')
@@ -396,6 +405,12 @@ class App(ctk.CTk):
 
         self.c_socket.send(msg.encode())
         iv_c = self.c_socket.recv(64)
+        #self.c_socket.close()
+        #self.c_socket = None
+
+        print('iv_c: ')
+        print(iv_c)
+        print(type(iv_c))
 
         self.ciphertext = iv_c
         self.ciphertextbox.configure(state='normal')
@@ -404,27 +419,41 @@ class App(ctk.CTk):
         self.ciphertextbox.configure(state='disabled')
 
         self.history_textbox.configure(state='normal')
-        self.history_textbox.insert('0.0', '응답: ' + self.ciphertext)
+        self.history_textbox.insert('0.0', '응답: ')
+        self.history_textbox.insert('1.7', self.ciphertext)
         self.history_textbox.insert('0.0', '\n\n')
         self.history_textbox.configure(state='disabled')
 
+        print('self.ciphertext: ')
+        print(self.ciphertext)
+        print(type(self.ciphertext))
+
     def send_ciphertext(self, ciphertext):
-        msg = f'CIPH{ciphertext}'
         self.history_textbox.configure(state='normal')
-        self.history_textbox.insert('0.0', '요청: ' + ciphertext)
+        self.history_textbox.insert('0.0', '요청: ')
+        self.history_textbox.insert('1.7', ciphertext)
         self.history_textbox.insert('0.0', '\n')
         self.history_textbox.configure(state='disabled')
 
-        self.c_socket.send(msg.encode())
+        print(ciphertext)
+        print(type(ciphertext))
+        cmd = bytes('CIPH', 'utf-8')
+        print(cmd)
+        msg = cmd + ciphertext
+        print(msg)
+
+        self.c_socket.send(msg)
         plaintext = self.c_socket.recv(1024)
+        #self.c_socket.close()
+        #self.c_socket = None
 
         self.entry_dectext.configure(state='normal')
         self.entry_dectext.delete(0, "end")
-        self.entry_dectext.insert(tkinter.END, plaintext)
+        self.entry_dectext.insert(tkinter.END, plaintext.decode('utf-8'))
         self.entry_dectext.configure(state='disabled')
 
         self.history_textbox.configure(state='normal')
-        self.history_textbox.insert('0.0', '응답: ' + plaintext)
+        self.history_textbox.insert('0.0', '응답: ' + plaintext.decode('utf-8'))
         self.history_textbox.insert('0.0', '\n\n')
         self.history_textbox.configure(state='disabled')
 
@@ -435,7 +464,7 @@ class App(ctk.CTk):
             return
 
         if not self.c_socket:
-            if not init_connection(self):
+            if not self.init_connection():
                 CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
                 return
 
@@ -443,17 +472,18 @@ class App(ctk.CTk):
 
 
     def dec_button_event(self):
-        ciphertext = self.ciphertextbox.get("1.0", "end-1c")
+        #ciphertext = self.ciphertextbox.get("1.0", "end-1c")
+        ciphertext = self.ciphertext
         if not ciphertext:
             CTkMessagebox(title="Info", message=f"암호문이 존재하지 않습니다.")
             return
 
         if not self.c_socket:
-            if not init_connection(self):
+            if not self.init_connection():
                 CTkMessagebox(title="Error", message=f"네트워크 연결에 실패했습니다")
                 return
 
-        send_ciphertext(self, ciphertext)
+        self.send_ciphertext(ciphertext)
 
     def history_clear_event(self):
         self.history_textbox.configure(state='normal')
@@ -461,9 +491,13 @@ class App(ctk.CTk):
         self.history_textbox.configure(state='disabled')
 
     def clear_button_event(self):
-        self.entry_plaintext.delete("1.0", "end-1c")
+        self.entry_plaintext.delete(0, "end")
+        self.ciphertextbox.configure(state='normal')
         self.ciphertextbox.delete("1.0", "end-1c")
-        self.entry_dectext.delete("1.0", "end-1c")
+        self.ciphertextbox.configure(state='disabled')
+        self.entry_dectext.configure(state='normal')
+        self.entry_dectext.delete(0, "end")
+        self.entry_dectext.configure(state='disabled')
 
     def change_cipher_event(self, new_cipher: str):
         self.cipher = new_cipher
