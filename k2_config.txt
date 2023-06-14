@@ -1,4 +1,4 @@
-comm:/dev/ttyUSB0
+comm:COM8
 dhcp:false
 ip:192.168.2.153
 gateway:192.168.2.1
