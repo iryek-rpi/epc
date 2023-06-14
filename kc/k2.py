@@ -20,6 +20,11 @@ from crypto_ex import *
 logging.basicConfig(filename='app.log', filemode='w', level=logging.DEBUG)
 logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
+BAUD_RATE = 19200
+if BAUD_RATE == 9600:
+    SERIAL1_TIMEOUT = 0.2 # sec
+else:
+    SERIAL1_TIMEOUT = 0.1 # sec
 
 PORT_ENC = 8501
 PORT_DEC = 9501
@@ -56,6 +61,16 @@ def limit_key(sv):
 
     return True
 
+def limit_plaintext(sv):
+    content = sv.get()
+
+    if len(content) > 16: 
+        CTkMessagebox(title="알림", message="평문은 16자 이내로 입력하세요.", icon="info")
+        sv.set(content[:16])
+        return False
+
+    return True
+
 class App(ctk.CTk):
 
     def __init__(self):
@@ -75,7 +90,7 @@ class App(ctk.CTk):
         self.data_to_send = None
 
         self.title("데이터암호화 모듈 테스트 프로그램")
-        self.geometry(f"{1350}x{700}")
+        self.geometry(f"{1400}x{700}")
 
         self.grid_columnconfigure((0, 1, 2), weight=1)
         self.grid_rowconfigure((0, 1, 2), weight=1)
@@ -164,10 +179,13 @@ class App(ctk.CTk):
         self.clear_button.configure(text="내용 지우기")
         self.clear_button.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="we")
 
-        self.label_plaintext = ctk.CTkLabel(self.send_frame, text="평  문:")
+        self.sv_plaintext = ctk.StringVar()
+        self.sv_plaintext.trace("w", lambda name, index, mode, sv=self.sv_plaintext: limit_plaintext(sv))
+        self.label_plaintext = ctk.CTkLabel(self.send_frame, text="평문(16글자 이내):")
         self.label_plaintext.grid(row=1, column=0, padx=20, pady=(40, 0), sticky="nw")
-        self.entry_plaintext = ctk.CTkEntry(self.send_frame, width=500, placeholder_text="16자 이내의 암호화할 데이터를 입력하세요")
-        self.entry_plaintext.grid(row=1, column=0, padx=70, pady=(40,0), sticky="nw")
+        self.entry_plaintext = ctk.CTkEntry(self.send_frame, textvariable=self.sv_plaintext, 
+                                            width=400, placeholder_text="16자 이내의 암호화할 데이터를 입력하세요")
+        self.entry_plaintext.grid(row=1, column=0, padx=150, pady=(40,0), sticky="nwe")
 
         self.enc_button = ctk.CTkButton(self.send_frame, width=200, command=self.enc_button_event)
         self.enc_button.configure(text="암호화 요청", bg_color='#aa3333', fg_color='#bb3333')
@@ -176,7 +194,7 @@ class App(ctk.CTk):
         self.label_ciphertext = ctk.CTkLabel(self.send_frame, text="암호문:")
         self.label_ciphertext.grid(row=3, column=0, padx=20, pady=(30, 0), sticky="nw")
         self.ciphertextbox = ctk.CTkTextbox(self.send_frame, width=500, border_width = 2, border_color='gray', fg_color='light gray')
-        self.ciphertextbox.grid(row=3, column=0, padx=70, pady=(30,0), sticky="nw")
+        self.ciphertextbox.grid(row=3, column=0, padx=70, pady=(30,0), sticky="nwe")
         self.ciphertextbox.configure(state='disabled')
 
         self.dnc_button = ctk.CTkButton(self.send_frame, width=200, command=self.dec_button_event)
@@ -185,8 +203,8 @@ class App(ctk.CTk):
 
         self.label_dectext = ctk.CTkLabel(self.send_frame, text="복호문:")
         self.label_dectext.grid(row=5, column=0, padx=20, pady=(30, 0), sticky="nw")
-        self.entry_dectext = ctk.CTkEntry(self.send_frame, width=500, border_width = 2, border_color='gray', fg_color='light gray')
-        self.entry_dectext.grid(row=5, column=0, padx=70, pady=(30,0), sticky="nw")
+        self.entry_dectext = ctk.CTkEntry(self.send_frame, width=400, border_width = 2, border_color='gray', fg_color='light gray')
+        self.entry_dectext.grid(row=5, column=0, padx=70, pady=(30,0), sticky="nwe")
         self.entry_dectext.configure(state='disabled')
 
         #=================================================================================
@@ -217,6 +235,7 @@ class App(ctk.CTk):
         return options
 
     def apply_ui_options(self, options):
+        app.entry_serial_port.delete(0, "end")
         app.entry_serial_port.insert(0, options["comm"])
         if options['dhcp']:
             self.switch_var.set("DHCP")
@@ -294,8 +313,9 @@ class App(ctk.CTk):
 
     def read_device_options(self):
         try:
+            device = None
             self.comm_port = self.entry_serial_port.get()
-            device = serial.Serial(port=self.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+            device = serial.Serial(port=self.comm_port, baudrate=BAUD_RATE, bytesize=8, parity='N', stopbits=1, timeout=SERIAL1_TIMEOUT, write_timeout=SERIAL1_TIMEOUT) 
         except serial.serialutil.SerialException as e:
             CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
             logging.debug('시리얼 예외 발생: ', e)
@@ -312,6 +332,7 @@ class App(ctk.CTk):
                 if msg.startswith('CNF_JSN') and msg.endswith('CNF_END'):
                     msg = msg[7:-7]
                     options = json.loads(msg)
+                    options['comm'] = self.comm_port
                     self.apply_ui_options(options)
                     logging.debug(f'수신: {msg}')
                     device.reset_input_buffer()
@@ -320,14 +341,15 @@ class App(ctk.CTk):
                 CTkMessagebox(title="Info", message=f"단말에서 정보를 읽어올 수 없습니다.")
 
         finally:
-            device.close()
-            device = None
+            if device:
+                device.close()
+                device = None
 
     def write_device_options(self):
 
         try:
             self.comm_port = self.entry_serial_port.get()
-            device = serial.Serial(port=self.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+            device = serial.Serial(port=self.comm_port, baudrate=BAUD_RATE, bytesize=8, parity='N', stopbits=1, timeout=SERIAL1_TIMEOUT, write_timeout=SERIAL1_TIMEOUT) 
         except serial.serialutil.SerialException as e:
             CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({self.comm_port})를 확인하세요.")
             logging.debug('시리얼 예외 발생: ', e)
@@ -445,8 +467,8 @@ class App(ctk.CTk):
     def enc_button_event(self):
         plaintext = self.entry_plaintext.get()
         if not plaintext:
-            CTkMessagebox(title="Info", message=f"암호화할 평문을 입력하세요")
-            return
+            CTkMessagebox(title="Info", message=f"암호화할 평문(16글자 이내)를 입력하세요")
+            retur를
 
         if not self.c_socket:
             if not self.init_connection():
