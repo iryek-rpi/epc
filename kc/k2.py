@@ -32,16 +32,6 @@ ctk.set_appearance_mode(
 ctk.set_default_color_theme(
     "green")  # Themes: "blue" (standard), "green", "dark-blue"
 
-OPTIONS = {
-    'comm_port': COMM_PORT,
-    'dhcp': 0,
-    'ip': '',
-    'gateway': '',
-    'subnet': SUBNET_MASK,
-    'port': '',
-    'key': '1234567890'
-}
-
 class StoppableThread(threading.Thread):
     """Thread class with a stop() method. The thread itself has to check
     regularly for the stopped() condition."""
@@ -55,63 +45,6 @@ class StoppableThread(threading.Thread):
 
     def stopped(self):
         return self._stop_event.is_set()
-
-def read_device_options(_app):
-
-    try:
-        _app.comm_port = _app.entry_serial_port.get()
-        device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
-    except serial.serialutil.SerialException as e:
-        #_app.config(cursor='watch')
-        CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
-        #CTkMessagebox(title="Info", message="단말에서 설정값을 읽어오고 있습니다. 잠시만 기다려주세요.")
-        #tkinter.messagebox.showinfo("Info", "This is a tkinter.messagebox!")
-        logging.debug('시리얼 예외 발생: ', e)
-    else:
-        #while not current_thread().stopped() or not app.stop_thread:
-        device.write('CNF_REQ\n'.encode())
-        msg = device.readline()
-
-        if msg:
-            logging.debug(f'수신: {msg}')
-            msg = msg.decode('utf-8')
-            msg = msg.strip()
-            logging.debug(f'수신 decoded: {msg}')
-            if msg.startswith('CNF_JSN') and msg.endswith('CNF_END'):
-                msg = msg[7:-7]
-                options = json.loads(msg)
-                apply_options(options, _app)
-                logging.debug(f'수신: {msg}')
-                device.reset_input_buffer()
-        else:
-            logging.debug('수신: No Data')
-            CTkMessagebox(title="Info", message=f"단말에서 정보를 읽어올 수 없습니다.")
-
-    finally:
-        device.close()
-        device = None
-
-def write_device_options(_app):
-
-    try:
-        _app.comm_port = _app.entry_serial_port.get()
-        device = serial.Serial(port=_app.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
-    except serial.serialutil.SerialException as e:
-        CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
-        logging.debug('시리얼 예외 발생: ', e)
-    else:
-        options = _app.read_ui_options()
-        options.pop('comm')
-        str_options = json.dumps(options)
-
-        msg = bytes(f"CNF_WRT{str_options}CNF_END\n", encoding='utf-8')
-        written=device.write(msg)
-        logging.debug(f'송신: {msg}')
-        logging.debug(f'송신: {written} bytes')
-        time.sleep(0.3)
-    finally:
-        device.close()
-        device = None
 
 def limit_key(sv):
     content = sv.get()
@@ -146,8 +79,6 @@ class App(ctk.CTk):
 
         self.grid_columnconfigure((0, 1, 2), weight=1)
         self.grid_rowconfigure((0, 1, 2), weight=1)
-
-        self.options = OPTIONS
 
         self.sidebar_frame = ctk.CTkFrame(self, width=160, corner_radius=0)  #,
         self.sidebar_frame.grid(row=0, column=0, rowspan=50, sticky="nsew")
@@ -334,18 +265,6 @@ class App(ctk.CTk):
             f.write("port:" + options["port"] + "\n")
             f.write("key:" + options["key"] + "\n")
 
-    def load_file_event(self):
-        self.filename = fdlg.askopenfilename()
-        file_contents = None
-        with open(self.filename, 'r') as f:
-            file_contents = f.read()
-        file_info = f'{self.filename} : {len(file_contents)} bytes'
-        self.label_filename.configure(text=file_info)
-        self.entry_plaintext.insert("0.0", file_contents)
-
-    def send_button_event(self):
-        return
-
     def dhcp_event(self):
         if self.switch_var.get() == 'NO-DHCP':
             self.entry_ip.configure(state='disabled')
@@ -357,16 +276,74 @@ class App(ctk.CTk):
             self.entry_subnet.configure(state='normal')
         print("switch toggled, current value:", self.switch_var.get())
 
+    def read_option_event(self):
+        self.read_device_options()
+
+        options = self.read_ui_options()
+        self.write_options_file(options)
+
     def apply_option_event(self):
         if self.c_socket:
             self.c_socket.close()
             self.c_socket = None
 
-        write_device_options(self)
+        self.write_device_options()
 
-    def read_option_event(self):
-        #self.init_options_thread()
-        read_device_options(self)
+        options = self.read_ui_options()
+        self.write_options_file(options)
+
+    def read_device_options(self):
+        try:
+            self.comm_port = self.entry_serial_port.get()
+            device = serial.Serial(port=self.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+        except serial.serialutil.SerialException as e:
+            CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
+            logging.debug('시리얼 예외 발생: ', e)
+        else:
+            #while not current_thread().stopped() or not app.stop_thread:
+            device.write('CNF_REQ\n'.encode())
+            msg = device.readline()
+
+            if msg:
+                logging.debug(f'수신: {msg}')
+                msg = msg.decode('utf-8')
+                msg = msg.strip()
+                logging.debug(f'수신 decoded: {msg}')
+                if msg.startswith('CNF_JSN') and msg.endswith('CNF_END'):
+                    msg = msg[7:-7]
+                    options = json.loads(msg)
+                    self.apply_ui_options(options)
+                    logging.debug(f'수신: {msg}')
+                    device.reset_input_buffer()
+            else:
+                logging.debug('수신: No Data')
+                CTkMessagebox(title="Info", message=f"단말에서 정보를 읽어올 수 없습니다.")
+
+        finally:
+            device.close()
+            device = None
+
+    def write_device_options(self):
+
+        try:
+            self.comm_port = self.entry_serial_port.get()
+            device = serial.Serial(port=self.comm_port, baudrate=9600, bytesize=8, parity='N', stopbits=1, timeout=0.6, write_timeout=0.3) #0.5sec
+        except serial.serialutil.SerialException as e:
+            CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({self.comm_port})를 확인하세요.")
+            logging.debug('시리얼 예외 발생: ', e)
+        else:
+            options = self.read_ui_options()
+            options.pop('comm')
+            str_options = json.dumps(options)
+
+            msg = bytes(f"CNF_WRT{str_options}CNF_END\n", encoding='utf-8')
+            written=device.write(msg)
+            logging.debug(f'송신: {msg}')
+            logging.debug(f'송신: {written} bytes')
+            time.sleep(0.3)
+        finally:
+            device.close()
+            device = None
 
     def pop_up_msg(self, msg:str):
         win = ctk.CTkToplevel()
@@ -382,15 +359,6 @@ class App(ctk.CTk):
         btn = ctk.CTkButton(master=frame, text="OK", command=win.destroy)
         btn.pack(ipady=5,ipadx=5,pady=10,padx=10)
 
-    def init_options_thread(self):
-        if self.read_options_thread:
-            self.read_options_thread.stop()
-            self.read_options_thread.join()
-            self.read_options_thread = None
-
-        self.read_options_thread = StoppableThread(target=read_device_options,args=(self,))
-        self.read_options_thread.start()
-
     def init_connection(self):
         try:
             if self.c_socket:
@@ -398,23 +366,20 @@ class App(ctk.CTk):
                 self.c_socket = None
             _ip = self.entry_ip.get()
             _port = self.entry_port.get()
-            _sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            _sock.connect((_ip, int(_port)))  # connect to the server
+            self.c_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.c_socket.connect((_ip, int(_port)))  # connect to the server
         except socket.error:
-            if _sock:
-                _sock.close()
+            if self.c_socket:
+                self.c_socket.close()
                 self.c_socket = None
             return None
         except ValueError:
-            if _sock:
-                _sock.close()
+            if self.c_socket:
+                self.c_socket.close()
                 self.c_socket = None
             return None
         else:
-            self.c_socket = _sock
-            #_app.label_enc_status.configure(text="연결됨")
-            #_app.label_enc_status.configure(fg_color="green")
-            return _sock
+            return self.c_socket
 
     def send_plaintext(self, plaintext):
         msg = f'TEXT{plaintext}'
@@ -533,6 +498,7 @@ if __name__ == "__main__":
 
     options = app.read_options_file()
     app.apply_ui_options(options)
+    app.comm_port = options["comm"]
 
     app.mainloop()
 
