@@ -1,6 +1,7 @@
 import sys
 import serial
 import logging
+import time
 
 #create default logger
 #logging.basicConfig(level=logging.DEBUG)
@@ -23,9 +24,10 @@ if __name__ == "__main__":
         print('시리얼 예외 발생: ', e)
     else:
         while 1:
-            data = device.read(1024)
+            data = device.readline()
             if data:
                 logging.debug(f"수신: {data}")
+            time.sleep(0.3)
 
         device.close()
         device = None
