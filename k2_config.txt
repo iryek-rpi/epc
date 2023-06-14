@@ -1,6 +1,7 @@
-comm: /dev/ttyUSB0
-dhcp: false
-ip: 127.0.0.1
-subnet: 255.255.255.0
-port: 8501
-key: 12345678
+comm:/dev/ttyUSB0
+dhcp:false
+ip:192.168.2.13
+gateway:192.168.2.1
+subnet:255.255.255.0
+port:8531
+key:12345678
