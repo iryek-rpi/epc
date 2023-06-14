@@ -100,7 +100,8 @@ def write_device_options(_app):
         CTkMessagebox(title="Info", message=f"시리얼 연결 오류: COM 포트({_app.comm_port})를 확인하세요.")
         logging.debug('시리얼 예외 발생: ', e)
     else:
-        options = read_ui_options(_app)
+        options = _app.read_ui_options()
+        options.pop('comm')
         str_options = json.dumps(options)
 
         msg = bytes(f"CNF_WRT{str_options}CNF_END\n", encoding='utf-8')
@@ -111,39 +112,6 @@ def write_device_options(_app):
     finally:
         device.close()
         device = None
-
-def apply_options(options, _app):
-    #app.entry_serial_port.insert(0, options["comm_port"])
-    if options['dhcp']:
-        _app.switch_var.set("DHCP")
-    else:
-        _app.switch_var.set("NO-DHCP")
-    _app.entry_ip.delete(0, "end")
-    _app.entry_ip.insert(0, options["ip"])
-    _app.entry_subnet.delete(0, "end")
-    _app.entry_subnet.insert(0, options["subnet"])
-    _app.entry_gateway.delete(0, "end")
-    _app.entry_gateway.insert(0, options["gateway"])
-    _app.entry_port.delete(0, "end")
-    _app.entry_port.insert(0, options["port"])
-    _app.entry_key.delete(0, "end")
-    _app.entry_key.insert(0, options["key"])
-
-def read_ui_options(_app):
-
-    options = {}
-    options['comm_port'] = _app.entry_serial_port.get()
-    if app.switch_var.get() == "DHCP":
-        options['dhcp'] = 1
-    else:
-        options['dhcp'] = 0
-    options['ip'] = app.entry_ip.get()
-    options['subnet'] = app.entry_subnet.get()
-    options['gateway'] = app.entry_gateway.get()
-    options['port'] = app.entry_port.get()
-    options['key'] = app.entry_key.get()
-
-    return options
 
 def limit_key(sv):
     content = sv.get()
@@ -302,17 +270,69 @@ class App(ctk.CTk):
         self.history_textbox.configure(state='disabled')
         #self.receive_textbox.configure(bg_color='blue', fg_color='blue', border_color='blue')
 
-    def get_options(self):
-        self.options['dhcp'] = self.switch_var.get()
-        self.options['ip'] = self.entry_ip.get()
-        self.options['port'] = self.entry_port.get()
-        self.options['key'] = self.entry_key.get()
-        self.options['gateway'] = self.entry_gateway.get()
-        self.options['subnet'] = self.entry_subnet.get()
-        return self.options
-    
-    def set_options(self, value):
-        self.options = value
+    def read_ui_options(self):
+        options = {}
+        options['comm'] = self.entry_serial_port.get()
+        if self.switch_var.get() == "DHCP":
+            options['dhcp'] = 1
+        else:
+            options['dhcp'] = 0
+        options['ip'] = self.entry_ip.get()
+        options['subnet'] = self.entry_subnet.get()
+        options['gateway'] = self.entry_gateway.get()
+        options['port'] = self.entry_port.get()
+        options['key'] = self.entry_key.get()
+
+        return options
+
+    def apply_ui_options(self, options):
+        app.entry_serial_port.insert(0, options["comm"])
+        if options['dhcp']:
+            self.switch_var.set("DHCP")
+        else:
+            self.switch_var.set("NO-DHCP")
+        self.entry_ip.delete(0, "end")
+        self.entry_ip.insert(0, options["ip"])
+        self.entry_subnet.delete(0, "end")
+        self.entry_subnet.insert(0, options["subnet"])
+        self.entry_gateway.delete(0, "end")
+        self.entry_gateway.insert(0, options["gateway"])
+        self.entry_port.delete(0, "end")
+        self.entry_port.insert(0, options["port"])
+        self.entry_key.delete(0, "end")
+        self.entry_key.insert(0, options["key"])
+
+    def read_options_file(self):
+        options = {}
+
+        with open("k2_config.txt", "r") as f:
+            lines = f.readlines()
+            options['comm'] = lines[0].split("comm:")[1].strip()
+            dhcp =  lines[1].split("dhcp:")[1].strip()
+            if dhcp == 'ture':
+                options['dhcp'] = 1
+            else:
+                options['dhcp'] = 0
+            options['ip'] = lines[2].split("ip:")[1].strip()
+            options['gateway'] = lines[3].split("gateway:")[1].strip()
+            options['subnet'] = lines[4].split("subnet:")[1].strip()
+            options['port'] = lines[5].split("port:")[1].strip()
+            options['key'] = lines[6].split("key:")[1].strip()
+
+        return options
+
+    def write_options_file(self, options):
+        with open('k2_config.txt', 'w') as f:
+            f.write("comm:" + options["comm"] + "\n")
+            if options["dhcp"]:
+                f.write("dhcp:" + 'true' + "\n")
+            else:
+                f.write("dhcp:" + 'false' + "\n")
+            f.write("ip:" + options["ip"] + "\n")
+            f.write("gateway:" + options["gateway"] + "\n")
+            f.write("subnet:" + options["subnet"] + "\n")
+            f.write("port:" + options["port"] + "\n")
+            f.write("key:" + options["key"] + "\n")
 
     def load_file_event(self):
         self.filename = fdlg.askopenfilename()
@@ -511,34 +531,8 @@ if __name__ == "__main__":
 
     app = App()
 
-    #with open("k2_config.txt", "r") as f:
-    #    lines = f.readlines()
-    #    comm_port = lines[0].split("comm:")[1].strip()
-    #    dhcp = lines[1].split("dhcp:")[1].strip()
-    #    ip = lines[2].split("ip:")[1].strip()
-    #    subnet = lines[3].split("subnet:")[1].strip()
-    #    port = lines[4].split("port:")[1].strip()
-    #    key = lines[5].split("key:")[1].strip()
-
-    #app.switch_var = ctk.StringVar(value="NO-DHCP")
-
-    options = app.options
-    comm_port = options['comm_port']
-    dhcp = options['dhcp']
-    ip = options['ip']
-    subnet = options['subnet']
-    port = options['port']
-    key = options['key']
-
-    app.entry_serial_port.insert(0, comm_port)
-    if options['dhcp']:
-        app.switch_var.set("DHCP")
-    else:
-        app.switch_var.set("NO-DHCP")
-    app.entry_ip.insert(0, ip)
-    app.entry_subnet.insert(0, subnet)
-    app.entry_port.insert(0, port)
-    app.entry_key.insert(0, key)
+    options = app.read_options_file()
+    app.apply_ui_options(options)
 
     app.mainloop()
 
