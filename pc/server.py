@@ -2,6 +2,8 @@ import threading
 import socket
 import logging
 
+define LOG_FILE = '/home/ubuntu/epc/log.txt'
+
 def setup_logger(log_file):
     logger = logging.getLogger('my_logger')
     logger.setLevel(logging.DEBUG)
@@ -21,7 +23,7 @@ def setup_logger(log_file):
 
     return logger
 
-logger = setup_logger('log.txt')
+logger = setup_logger(LOG_FILE)
 
 def encrypt(s, token):
     s2 = ''
